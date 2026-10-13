@@ -29,6 +29,7 @@ SAMPLES = {
 }
 RATE = 44100
 CHANNELS = 2
+MAX_DURATION = 3
 OUT = ROOT / "public/audio/vcsl"
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -64,7 +65,7 @@ with tempfile.TemporaryDirectory(prefix="timequence-samples-") as work:
                    if max(abs(pcm[i]), abs(pcm[i + 1])) > threshold]
         begin = max(0, audible[0] // CHANNELS - int(RATE * 0.005))
         end = min(len(pcm) // CHANNELS, audible[-1] // CHANNELS + int(RATE * 0.15))
-        end = min(end, begin + 16 * RATE)
+        end = min(end, begin + MAX_DURATION * RATE)
         pcm = pcm[begin * CHANNELS:end * CHANNELS]
         duration = len(pcm) / (RATE * CHANNELS)
         # Match the loudest 400 ms RMS, avoiding silence-heavy tail bias.
@@ -108,7 +109,7 @@ license_data, _ = download("LICENSE")
 (OUT / "manifest.json").write_text(json.dumps({
     "library": "Versilian Community Sample Library (VCSL)",
     "repository": "https://github.com/sgossner/VCSL", "commit": COMMIT, "license": "CC0-1.0",
-    "processing": "44.1 kHz stereo, silence trim, max 16s, active RMS normalization with -4 dBFS peak cap, fades, 192 kbps MP3",
+    "processing": "44.1 kHz stereo, silence trim, max 3s, active RMS normalization with -4 dBFS peak cap, fades, 192 kbps MP3",
     "samples": manifest,
 }, indent=2) + "\n")
 (ROOT / "src/sample-metadata.ts").write_text(

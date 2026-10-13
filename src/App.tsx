@@ -17,8 +17,9 @@ import {
   Copy,
   Expand,
   Headphones,
+  Leaf,
   LoaderCircle,
-  Minus,
+  MoreHorizontal,
   Pause,
   Pencil,
   Play,
@@ -40,34 +41,33 @@ import {
   X,
 } from "lucide-react";
 import { AudioEngine, SampleLoadError } from "./audio";
-import { getSound } from "./sounds";
+import { SettingsPopover } from "./SettingsPopover";
+import { ZenMode } from "./ZenMode";
+import { initialTimers } from "./examples";
+import { loadTimers, serializeTimers, STORAGE } from "./storage";
+import { getSound, MAX_SOUND_DURATION } from "./sounds";
 import {
   clamp,
-  BASE_CELL_WIDTH,
-  GRID_SECOND,
-  MIN_ZOOM,
-  MAX_ZOOM,
-  rulerInterval,
-  snapSecond,
-  restoreTimers,
-  initialTimers,
+  CELL_PITCH,
+  DEFAULT_STEP,
+  changeTimerStep,
+  snapToStep,
   makeTimer,
   makeTrack,
+  makeEvent,
+  trackColors,
   moveEvent,
   repeatEvent,
   resizeTimer,
   sounds,
   time,
   uid,
-  type EventMode,
   type SoundEvent,
   type SoundId,
   type Timer,
   type Track,
 } from "./model";
 
-const STORAGE = "timequence.timers.v2";
-const LEGACY_STORAGE = "timequence.timers.v1";
 const SOUND_ICONS = {
   bell: Bell,
   pulse: Activity,
@@ -82,59 +82,140 @@ type Drag = {
   event: string;
   startX: number;
   at: number;
-  duration: number;
   nextAt: number;
-  nextDuration: number;
-  resize: boolean;
   moved: boolean;
   target: string;
   scale: number;
 };
-type Modal = "create" | "edit" | "sounds" | "help" | "delete" | "focus" | null;
+type Modal =
+  | "create"
+  | "edit"
+  | "sounds"
+  | "help"
+  | "delete"
+  | "focus"
+  | "zen"
+  | "timers"
+  | "timer-actions"
+  | null;
+const countLabel = (n: number, forms: [string, string, string]) =>
+  `${n} ${forms[n % 100 >= 11 && n % 100 <= 14 ? 2 : n % 10 === 1 ? 0 : n % 10 >= 2 && n % 10 <= 4 ? 1 : 2]}`;
 
-function Waveform({
-  seed = 1,
-  large = false,
-  sound,
+function TimerList({
+  timers,
+  activeId,
+  select,
 }: {
-  seed?: number;
-  large?: boolean;
-  sound?: SoundId;
+  timers: Timer[];
+  activeId?: string;
+  select: (id: string) => void;
 }) {
-  const waveform = sound ? getSound(sound).waveform : undefined;
   return (
-    <span className={`waveform ${large ? "large" : ""}`} aria-hidden="true">
-      {Array.from({ length: large ? 66 : 21 }, (_, i) => (
-        <i
-          key={i}
-          style={{
-            height: `${waveform ? 4 + 96 * Math.sqrt(waveform[Math.floor((i * waveform.length) / (large ? 66 : 21))]) : 16 + Math.abs(Math.sin(i * 1.7 + seed) * Math.cos(i * 0.63 + seed)) * 84}%`,
-          }}
-        />
+    <div className="timer-list">
+      {timers.map((t) => (
+        <button
+          className={`timer-card ${t.id === activeId ? "current" : ""}`}
+          key={t.id}
+          aria-current={t.id === activeId ? "true" : undefined}
+          onClick={() => select(t.id)}
+        >
+          <span className="timer-card-top">
+            <strong title={t.name}>{t.name}</strong>
+            <span>{time(t.duration)}</span>
+          </span>
+          <MiniSequence timer={t} />
+        </button>
       ))}
-    </span>
+    </div>
   );
 }
+
+function TrackName({
+  name,
+  disabled,
+  onActivate,
+  onRename,
+}: {
+  name: string;
+  disabled: boolean;
+  onActivate: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const ignoreBlur = useRef(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  function finish(save: boolean, restoreFocus = false) {
+    ignoreBlur.current = true;
+    const next = draft.trim();
+    if (save && !disabled && next && next !== name) onRename(next);
+    setEditing(false);
+    if (restoreFocus)
+      requestAnimationFrame(() =>
+        buttonRef.current?.focus({ preventScroll: true }),
+      );
+  }
+
+  return editing ? (
+    <input
+      className="track-name-input"
+      aria-label="Название дорожки"
+      value={draft}
+      maxLength={60}
+      disabled={disabled}
+      autoFocus
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        if (!ignoreBlur.current) finish(true);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === "Escape") {
+          event.preventDefault();
+          event.stopPropagation();
+          finish(event.key === "Enter", true);
+        }
+      }}
+    />
+  ) : (
+    <button
+      ref={buttonRef}
+      className="track-name-button"
+      aria-label={`Переименовать дорожку: ${name}`}
+      title="Переименовать дорожку"
+      disabled={disabled}
+      onClick={() => {
+        setDraft(name);
+        ignoreBlur.current = false;
+        setEditing(true);
+        onActivate();
+      }}
+    >
+      <strong>{name}</strong>
+    </button>
+  );
+}
+
 function MiniSequence({ timer }: { timer: Timer }) {
   return (
     <span className="mini-sequence" aria-hidden="true">
-      {timer.tracks.slice(0, 3).map((t, i) => (
-        <span key={t.id}>
-          {t.events.slice(0, 14).map((e) => (
-            <i
-              key={e.id}
-              className={i === 1 ? "accent" : ""}
-              style={{
-                left: `${(e.at / timer.duration) * 95}%`,
-                width:
-                  e.mode === "hold"
-                    ? `${Math.max(4, (e.duration / timer.duration) * 95)}%`
-                    : "4px",
-              }}
-            />
-          ))}
-        </span>
-      ))}
+      {timer.tracks
+        .filter((t) => !t.tickEvery)
+        .slice(0, 3)
+        .map((t) => (
+          <span key={t.id} className={`color-${t.color}`}>
+            {t.events.slice(0, 14).map((e) => (
+              <i
+                key={e.id}
+                style={{
+                  left: `${(e.at / timer.duration) * 95}%`,
+                  width: "3px",
+                }}
+              />
+            ))}
+          </span>
+        ))}
     </span>
   );
 }
@@ -202,7 +283,11 @@ function TimerForm({
   close: () => void;
 }) {
   const [name, setName] = useState(timer?.name ?? "");
-  const [duration, setDuration] = useState(timer?.duration ?? 300);
+  const step = timer?.step ?? DEFAULT_STEP;
+  const [steps, setSteps] = useState(
+    Math.ceil((timer?.duration ?? 300) / step),
+  );
+  const duration = steps * step;
   const removed =
     timer?.tracks.reduce(
       (sum, t) => sum + t.events.filter((e) => e.at >= duration).length,
@@ -212,13 +297,16 @@ function TimerForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (name.trim() && duration >= 5 && duration <= 3600)
+        if (
+          name.trim() &&
+          Number.isInteger(steps) &&
+          steps >= 1 &&
+          duration <= 3600
+        )
           onSave(name.trim(), duration);
       }}
     >
-      <span className="eyebrow">ВАША ПОСЛЕДОВАТЕЛЬНОСТЬ</span>
-      <h2>{timer ? "Настройки таймера" : "Начнём с чистого листа"}</h2>
-      <p className="muted">Любой ритм. Для всего, что важно вам.</p>
+      <h2>{timer ? "Настройки таймера" : "Новый таймер"}</h2>
       <label className="form-field">
         Название
         <input
@@ -231,18 +319,18 @@ function TimerForm({
         />
       </label>
       <label className="form-field">
-        Длительность, в секундах
+        Количество шагов
         <input
           type="number"
-          min="5"
-          max="3600"
+          min="1"
+          max={Math.floor(3600 / step)}
           step="1"
           required
-          value={duration || ""}
-          onChange={(e) => setDuration(Number(e.target.value))}
+          value={steps || ""}
+          onChange={(e) => setSteps(Number(e.target.value))}
         />
         <span className="field-note">
-          {time(duration)} · от 5 секунд до 60 минут
+          {time(duration)} · один шаг — {step} сек
         </span>
       </label>
       {removed > 0 && (
@@ -258,7 +346,12 @@ function TimerForm({
         <button
           type="submit"
           className="btn primary"
-          disabled={!name.trim() || duration < 5 || duration > 3600}
+          disabled={
+            !name.trim() ||
+            steps < 1 ||
+            !Number.isInteger(steps) ||
+            duration > 3600
+          }
         >
           {timer ? "Сохранить" : "Создать таймер"}
           <ArrowRight size={16} />
@@ -272,12 +365,7 @@ export default function App() {
   const [storageMessage, setStorageMessage] = useState("");
   const [timers, setTimers] = useState<Timer[]>(() => {
     try {
-      const raw =
-        localStorage.getItem(STORAGE) ?? localStorage.getItem(LEGACY_STORAGE);
-      if (raw) {
-        const restored = restoreTimers(JSON.parse(raw));
-        if (restored) return restored;
-      }
+      return loadTimers((key) => localStorage.getItem(key));
     } catch {
       /* Keep the editor usable when storage is unavailable. */
     }
@@ -285,14 +373,12 @@ export default function App() {
   });
   const [activeId, setActiveId] = useState(() => timers[0]?.id ?? "");
   const timer = timers.find((t) => t.id === activeId) ?? timers[0];
-  const [selection, setSelection] = useState<Selection>(() =>
-    timers[0]?.tracks[1]
-      ? {
-          track: timers[0].tracks[1].id,
-          event: timers[0].tracks[1].events[1]?.id,
-        }
-      : null,
-  );
+  const [selection, setSelected] = useState<Selection>(null);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  function setSelection(next: Selection) {
+    setSelected(next);
+    setInspectorOpen(!!next);
+  }
   const [modal, setModal] = useState<Modal>(null);
   const [soundChoice, setSoundChoice] = useState<SoundId>("nepal-bell");
   const [soundGroup, setSoundGroup] = useState<"sample" | "synth">("sample");
@@ -307,8 +393,15 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [position, setPosition] = useState(0);
   const [volume, setVolume] = useState(65);
-  const [mode, setMode] = useState<EventMode>("hit");
-  const [repeatEvery, setRepeatEvery] = useState(30);
+  const audibleVolume = useRef(65);
+  const [transportError, setTransportError] = useState("");
+  function toggleMute() {
+    if (volume > 0) {
+      audibleVolume.current = volume;
+      setVolume(0);
+    } else setVolume(audibleVolume.current);
+  }
+  const [repeatEvery, setRepeatEvery] = useState(4);
   const [toast, setToast] = useState("");
   const [history, setHistory] = useState<Timer[][]>([]);
   const [future, setFuture] = useState<Timer[][]>([]);
@@ -318,22 +411,34 @@ export default function App() {
   const engine = useRef(new AudioEngine());
   const previewEngine = useRef(new AudioEngine());
   const stageRef = useRef<HTMLDivElement>(null);
+  const playheadRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({
     left: 0,
+    top: 0,
+    ruler: 44,
     width: 1000,
+    height: 400,
     label: 184,
   });
-  const zoomScroll = useRef<number | null>(null);
-  const pixelsPerSecond = BASE_CELL_WIDTH * (timer?.zoom ?? 0.5);
+  const gridStep = timer?.step ?? DEFAULT_STEP;
+  const pixelsPerSecond = CELL_PITCH / gridStep;
+  // Start at the first cell; scroll only once the playhead reaches the center.
+  const playheadCenter = Math.max(0, (viewport.width - viewport.label) / 2);
   const transportToken = useRef(0);
 
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
+    stage.scrollLeft = 0;
+    stage.scrollTop = 0;
     const measure = () =>
       setViewport({
         left: stage.scrollLeft,
+        top: stage.scrollTop,
+        ruler:
+          stage.querySelector<HTMLElement>(".ruler-row")?.offsetHeight ?? 44,
         width: stage.clientWidth,
+        height: stage.clientHeight,
         label:
           (stage.querySelector(".track-column-caption") as HTMLElement | null)
             ?.offsetWidth ?? 184,
@@ -349,38 +454,102 @@ export default function App() {
   }, [timer?.id]);
 
   useLayoutEffect(() => {
-    if (zoomScroll.current !== null && stageRef.current) {
-      stageRef.current.scrollLeft = zoomScroll.current * pixelsPerSecond;
-      zoomScroll.current = null;
-    }
-  }, [pixelsPerSecond]);
+    const stage = stageRef.current;
+    if (stage && !playing)
+      stage.scrollLeft = Math.max(
+        0,
+        position * pixelsPerSecond - playheadCenter,
+      );
+  }, [playing, position, pixelsPerSecond, viewport.width, viewport.label]);
+
+  useLayoutEffect(() => {
+    if (playing || !playheadRef.current) return;
+    const x = position * pixelsPerSecond - (stageRef.current?.scrollLeft ?? 0);
+    playheadRef.current.style.transform = `translateX(${x}px)`;
+  }, [
+    playing,
+    position,
+    pixelsPerSecond,
+    viewport.left,
+    viewport.width,
+    viewport.label,
+    timer?.tracks.length,
+  ]);
 
   useEffect(() => {
     const stage = stageRef.current;
-    if (!stage || !playing) return;
-    const x = position * pixelsPerSecond;
-    const visibleWidth = stage.clientWidth - viewport.label - 18;
-    if (x < stage.scrollLeft || x > stage.scrollLeft + visibleWidth - 16) {
-      stage.scrollLeft = Math.max(0, x - visibleWidth * 0.3);
-    }
-  }, [playing, position, pixelsPerSecond, viewport.label]);
+    if (!stage || !playing || !timer) return;
+    let frame = 0;
+    const follow = () => {
+      const x =
+        Math.min(timer.duration, engine.current.position) * pixelsPerSecond;
+      stage.scrollLeft = Math.max(0, x - playheadCenter);
+      if (playheadRef.current)
+        playheadRef.current.style.transform = `translateX(${Math.min(x, playheadCenter)}px)`;
+      frame = requestAnimationFrame(follow);
+    };
+    follow();
+    return () => cancelAnimationFrame(frame);
+  }, [playing, timer?.id, timer?.duration, pixelsPerSecond, playheadCenter]);
 
-  function changeZoom(value: number) {
-    if (!timer || drag) return;
-    const zoom = clamp(value, MIN_ZOOM, MAX_ZOOM);
-    if (zoom === timer.zoom) return;
-    zoomScroll.current = (stageRef.current?.scrollLeft ?? 0) / pixelsPerSecond;
-    setTimers((current) =>
-      current.map((t) => (t.id === timer.id ? { ...t, zoom } : t)),
-    );
+  function changeStep(value: number) {
+    if (!timer || locked || drag) return;
+    const next = changeTimerStep(timer, value);
+    if (next === timer || next.step === timer.step) return;
+    updateTimer(next);
+    setPosition((p) => (p / timer.step) * next.step);
   }
   const selectedTrack = timer?.tracks.find((t) => t.id === selection?.track);
   const selectedEvent = selectedTrack?.events.find(
     (e) => e.id === selection?.event,
   );
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage || !inspectorOpen || !selection || drag) return;
+    const row = stage.querySelector<HTMLElement>(
+      `[data-track-row="${selection.track}"]`,
+    );
+    if (!row) return;
+    if (selectedEvent) {
+      const x = selectedEvent.at * pixelsPerSecond;
+      const available = stage.clientWidth - viewport.label;
+      if (x < stage.scrollLeft) stage.scrollLeft = x;
+      else if (x + CELL_PITCH > stage.scrollLeft + available)
+        stage.scrollLeft = x + CELL_PITCH - available;
+    }
+    const bounds = stage.getBoundingClientRect();
+    const item = row.getBoundingClientRect();
+    const rulerHeight =
+      stage.querySelector(".ruler-row")?.getBoundingClientRect().height ?? 44;
+    const padding = bounds.height - rulerHeight >= item.height + 12 ? 12 : 0;
+    if (item.bottom > bounds.bottom - padding)
+      stage.scrollTop += item.bottom - bounds.bottom + padding;
+    else if (item.top < bounds.top + rulerHeight)
+      stage.scrollTop -= bounds.top + rulerHeight - item.top;
+  }, [
+    inspectorOpen,
+    selection?.track,
+    selectedEvent?.id,
+    selectedEvent?.at,
+    pixelsPerSecond,
+    !!drag,
+    viewport.width,
+    viewport.height,
+  ]);
+  function closeInspector(restoreFocus = true) {
+    setInspectorOpen(false);
+    stopPreview();
+    if (!restoreFocus) return;
+    requestAnimationFrame(() => {
+      const element = stageRef.current?.querySelector<HTMLElement>(
+        selection?.event
+          ? ".sound-event.selected"
+          : ".track-select.selected .track-name-button",
+      );
+      element?.focus({ preventScroll: true });
+    });
+  }
   const locked = playing || busy;
-  const totalEvents =
-    timer?.tracks.reduce((n, t) => n + t.events.length, 0) ?? 0;
   const closeModal = () => {
     stopPreview();
     setModal(null);
@@ -388,7 +557,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE, JSON.stringify(timers));
+      localStorage.setItem(STORAGE, serializeTimers(timers));
       setStorageMessage("");
     } catch {
       setStorageMessage(
@@ -453,6 +622,7 @@ export default function App() {
     setSelection(null);
   }
   function stop(reset = false) {
+    if (reset) setTransportError("");
     transportToken.current++;
     engine.current.stop();
     setPlaying(false);
@@ -466,6 +636,8 @@ export default function App() {
       return;
     }
     const token = ++transportToken.current;
+    setTransportError("");
+    setInspectorOpen(false);
     setBusy(true);
     stopPreview();
     try {
@@ -476,12 +648,14 @@ export default function App() {
       );
       if (started && token === transportToken.current) setPlaying(true);
     } catch (error) {
-      if (token === transportToken.current)
-        setToast(
+      if (token === transportToken.current) {
+        const message =
           error instanceof SampleLoadError
             ? error.message
-            : "Не удалось включить звук. Проверьте разрешения браузера и попробуйте снова.",
-        );
+            : "Не удалось включить звук. Проверьте разрешения браузера и попробуйте снова.";
+        setTransportError(message);
+        setToast(message);
+      }
     } finally {
       if (token === transportToken.current) setBusy(false);
     }
@@ -491,6 +665,13 @@ export default function App() {
     previewEngine.current.stop();
     setPreviewState(null);
     setPreviewError("");
+  }
+  function playInMode(mode: "zen" | "focus") {
+    if (busy) return;
+    stopPreview();
+    setInspectorOpen(false);
+    setModal(mode);
+    if (!playing) void togglePlay();
   }
   async function preview(sound: SoundId, level = 70) {
     if (previewState?.sound === sound) {
@@ -533,9 +714,10 @@ export default function App() {
       if (restarting) return;
       if (engine.current.context?.state !== "running") {
         stop();
-        setToast(
-          "Браузер приостановил звук. Нажмите «Продолжить», чтобы вернуться к таймеру.",
-        );
+        const message =
+          "Браузер приостановил звук. Нажмите «Продолжить», чтобы вернуться к таймеру.";
+        setTransportError(message);
+        setToast(message);
         return;
       }
       const next = engine.current.position;
@@ -549,7 +731,10 @@ export default function App() {
             })
             .catch(() => {
               stop();
-              setToast("Не удалось повторить таймер. Нажмите «Продолжить».");
+              const message =
+                "Не удалось повторить таймер. Нажмите «Продолжить».";
+              setTransportError(message);
+              setToast(message);
             })
             .finally(() => {
               restarting = false;
@@ -592,6 +777,25 @@ export default function App() {
     setActiveId(id);
     setSelection(null);
   }
+  function duplicateTimer() {
+    if (!timer || locked || timers.length >= 100) return;
+    const copy: Timer = {
+      ...structuredClone(timer),
+      id: uid(),
+      name: `${timer.name} (копия)`.slice(0, 60),
+      tracks: timer.tracks.map((t) => ({
+        ...t,
+        id: uid(),
+        events: t.events.map((e) => ({ ...e, id: uid() })),
+      })),
+    };
+    commit([...timers, copy]);
+    setActiveId(copy.id);
+    setSelection(null);
+    setPosition(0);
+    stopPreview();
+    setToast("Копия таймера создана.");
+  }
   function removeEvent() {
     if (!selectedTrack || !selectedEvent || locked) return;
     updateTrack(selectedTrack.id, {
@@ -630,14 +834,14 @@ export default function App() {
         e.preventDefault();
         removeEvent();
       }
-      if (e.key === "Escape") setSelection(null);
+      if (e.key === "Escape") closeInspector();
     };
     window.addEventListener("keydown", listener);
     return () => window.removeEventListener("keydown", listener);
   });
 
   function addEvent(track: Track, at: number) {
-    if (locked || movedRef.current || !timer) return;
+    if (locked || movedRef.current || !timer || track.tickEvery) return;
     const existing = track.events.find((e) => Math.abs(e.at - at) < 0.01);
     if (existing) {
       setSelection({ track: track.id, event: existing.id });
@@ -647,13 +851,7 @@ export default function App() {
       setToast("На одной дорожке можно разместить до 1000 событий.");
       return;
     }
-    const e: SoundEvent = {
-      id: uid(),
-      at,
-      duration:
-        mode === "hold" ? Math.min(10, timer.duration - at) : GRID_SECOND,
-      mode,
-    };
+    const e = makeEvent(at);
     updateTrack(track.id, {
       events: [...track.events, e].sort((a, b) => a.at - b.at),
     });
@@ -663,7 +861,6 @@ export default function App() {
     e: React.PointerEvent<HTMLElement>,
     track: Track,
     event: SoundEvent,
-    resize = false,
   ) {
     if (locked || !timer || e.button !== 0) return;
     e.preventDefault();
@@ -675,17 +872,14 @@ export default function App() {
       event: event.id,
       startX: e.clientX,
       at: event.at,
-      duration: event.duration,
       nextAt: event.at,
-      nextDuration: event.duration,
-      resize,
       moved: false,
       target: track.id,
       scale: row.getBoundingClientRect().width / timer.duration,
     };
     dragRef.current = d;
     setDrag(d);
-    setSelection({ track: track.id, event: event.id });
+    setSelected({ track: track.id, event: event.id });
   }
   useEffect(() => {
     if (!drag || !timer) return;
@@ -696,22 +890,19 @@ export default function App() {
       const event = timer.tracks
         .find((t) => t.id === d.track)!
         .events.find((ev) => ev.id === d.event)!;
-      const seconds = snapSecond(delta / d.scale);
+      const seconds = snapToStep(delta / d.scale, timer.step);
       const targetRow = document
         .elementsFromPoint(e.clientX, e.clientY)
-        .find((el) => el.hasAttribute("data-track-row"));
+        .find(
+          (el) =>
+            el.hasAttribute("data-track-row") &&
+            !el.hasAttribute("data-tick-track"),
+        );
       const next = {
         ...d,
         moved: true,
-        nextAt: d.resize
-          ? d.at
-          : moveEvent(event, d.at + seconds, timer.duration).at,
-        nextDuration: d.resize
-          ? clamp(d.duration + seconds, 1, timer.duration - d.at)
-          : d.duration,
-        target: d.resize
-          ? d.track
-          : (targetRow?.getAttribute("data-track-row") ?? d.target),
+        nextAt: moveEvent(event, d.at + seconds, timer.duration, timer.step).at,
+        target: targetRow?.getAttribute("data-track-row") ?? d.target,
       };
       dragRef.current = next;
       setDrag(next);
@@ -728,11 +919,11 @@ export default function App() {
             (e) => e.id !== event.id && Math.abs(e.at - d.nextAt) < 0.01,
           )
         )
-          setToast("В этот момент уже есть сигнал. Выберите соседнюю позицию.");
+          setToast("В этот момент уже есть звук. Выберите соседнюю позицию.");
         else if (d.target !== d.track && target.events.length >= 1000)
           setToast("На этой дорожке уже 1000 событий.");
         else {
-          const changed = { ...event, at: d.nextAt, duration: d.nextDuration };
+          const changed = { ...event, at: d.nextAt };
           updateTimer({
             ...timer,
             tracks: timer.tracks.map((t) => ({
@@ -767,28 +958,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!!drag]);
 
-  const gridWidth = (timer?.duration ?? 0) * pixelsPerSecond;
-  const tickInterval = rulerInterval(pixelsPerSecond);
-  // Mount only visible one-second cells, including a small keyboard/scroll buffer.
-  const firstSecond = Math.max(
-    0,
-    Math.floor(viewport.left / pixelsPerSecond) - 12,
+  const stepCount = Math.ceil((timer?.duration ?? 0) / gridStep);
+  const gridWidth = stepCount * CELL_PITCH;
+  // Mount the visible steps with a small buffer for scrolling and keyboard moves.
+  const firstStep = Math.max(0, Math.floor(viewport.left / CELL_PITCH) - 6);
+  const lastStep = Math.min(
+    stepCount,
+    Math.ceil((viewport.left + viewport.width - viewport.label) / CELL_PITCH) +
+      6,
   );
-  const lastSecond = Math.min(
-    timer?.duration ?? 0,
-    Math.ceil(
-      (viewport.left + viewport.width - viewport.label) / pixelsPerSecond,
-    ) + 12,
+  const visibleSteps = Array.from(
+    { length: Math.max(0, lastStep - firstStep) },
+    (_, i) => firstStep + i,
   );
-  const visibleSeconds = Array.from(
-    { length: Math.max(0, lastSecond - firstSecond) },
-    (_, i) => firstSecond + i,
-  );
-  const rulerSeconds = visibleSeconds.filter(
-    (second) =>
-      second % tickInterval === 0 &&
-      (timer!.duration - second) * pixelsPerSecond >= 40,
-  );
+  const currentStep =
+    position >= (timer?.duration ?? 0) ? -1 : Math.floor(position / gridStep);
   const nowLabel = playing
     ? "Сейчас играет"
     : position >= (timer?.duration ?? 1)
@@ -799,29 +983,34 @@ export default function App() {
   const drawEvent = (track: Track, ev: SoundEvent) => {
     const d = drag?.event === ev.id ? drag : null;
     const at = d?.nextAt ?? ev.at;
-    const duration = d?.nextDuration ?? ev.duration;
     const selected = selection?.event === ev.id;
     const active =
       playing &&
+      !track.muted &&
       position >= at &&
-      position < at + (ev.mode === "hold" ? duration : 0.7);
+      position <
+        at + Math.min(getSound(track.sound).duration, MAX_SOUND_DURATION);
     return (
       <div
         role="button"
         tabIndex={locked ? -1 : 0}
         aria-disabled={locked}
-        aria-label={`${track.name}, ${time(at)}, ${ev.mode === "hit" ? "короткий сигнал" : `${duration} секунд`}`}
+        aria-label={`${track.name}, шаг ${Math.floor(at / gridStep) + 1}, ${time(at)}`}
         aria-pressed={selected}
+        aria-haspopup="dialog"
+        aria-expanded={selected && inspectorOpen}
+        aria-controls={
+          selected && inspectorOpen ? "sound-properties" : undefined
+        }
         key={ev.id}
-        className={`sound-event ${pixelsPerSecond < 20 ? "compact" : ""} ${ev.mode} color-${track.color} ${selected ? "selected" : ""} ${active ? "sounding" : ""} ${d?.moved ? "dragging" : ""}`}
-        style={{
-          left: `${(at / timer!.duration) * 100}%`,
-          width:
-            ev.mode === "hold"
-              ? Math.max(4, duration * pixelsPerSecond - 2)
-              : Math.max(4, pixelsPerSecond - 2),
-        }}
-        title={`${time(at)} · ${ev.mode === "hit" ? "Короткий сигнал" : `${duration} с`}`}
+        className={`sound-event color-${track.color} ${selected ? "selected" : ""} ${active ? "sounding" : ""} ${d?.moved ? "dragging" : ""}`}
+        style={
+          {
+            "--event-start": `${at * pixelsPerSecond}px`,
+            "--event-span": `${CELL_PITCH}px`,
+          } as CSSProperties
+        }
+        title={`${track.name} · шаг ${Math.floor(at / gridStep) + 1} · ${time(at)}`}
         onPointerDown={(e) => beginDrag(e, track, ev)}
         onClick={(e) => {
           e.stopPropagation();
@@ -846,8 +1035,9 @@ export default function App() {
             e.stopPropagation();
             const next = moveEvent(
               ev,
-              ev.at + (e.key === "ArrowLeft" ? -GRID_SECOND : GRID_SECOND),
+              ev.at + (e.key === "ArrowLeft" ? -gridStep : gridStep),
               timer!.duration,
+              gridStep,
             );
             if (!track.events.some((x) => x.id !== ev.id && x.at === next.at))
               updateTrack(track.id, {
@@ -856,25 +1046,9 @@ export default function App() {
           }
         }}
       >
-        {ev.mode === "hit" ? (
-          <span className="hit-mark">
-            <i />
-            <i />
-            <i />
-          </span>
-        ) : (
-          <Waveform seed={at + 1} />
-        )}
-        {ev.mode === "hold" && (
-          <span
-            className="resize-handle"
-            title="Потяните, чтобы изменить длительность"
-            onPointerDown={(e) => beginDrag(e, track, ev, true)}
-          >
-            <i />
-            <i />
-          </span>
-        )}
+        <span className="cue-mark" aria-hidden="true">
+          <i />
+        </span>
       </div>
     );
   };
@@ -885,7 +1059,7 @@ export default function App() {
         <a
           href="#"
           className="brand"
-          aria-label="Timequence — главная"
+          aria-label="Timequence, в начало таймера"
           onClick={(e) => {
             e.preventDefault();
             stop(true);
@@ -896,30 +1070,20 @@ export default function App() {
             <i />
             <i />
           </span>
-          timequence<span className="beta">BETA</span>
+          timequence
         </a>
-        <nav>
-          <span className="nav-current">Мои таймеры</span>
+        <nav aria-label="Помощь">
           <button
             aria-label="Как это работает"
             onClick={() => setModal("help")}
           >
-            Как это работает <ArrowRight size={14} />
+            <CircleHelp size={18} />
+            <span>Как это работает</span>
           </button>
         </nav>
-        <span className={`save-state ${storageMessage ? "error" : ""}`}>
-          <span className="status-dot" />
-          {storageMessage ? "Не сохранено" : "Сохранено на устройстве"}
-        </span>
       </header>
       <div className="workspace">
         <aside className="sidebar">
-          <div className="sidebar-heading">
-            <span className="eyebrow">МОИ ТАЙМЕРЫ</span>
-            <span className="count">
-              {timers.length.toString().padStart(2, "0")}
-            </span>
-          </div>
           <button
             className="new-timer"
             onClick={() => {
@@ -931,43 +1095,18 @@ export default function App() {
             <Plus size={18} />
             Новый таймер
           </button>
-          <div className="timer-list">
-            {timers.map((t, index) => (
-              <button
-                className={`timer-card ${t.id === timer?.id ? "current" : ""}`}
-                key={t.id}
-                aria-current={t.id === timer?.id ? "true" : undefined}
-                onClick={() => switchTimer(t.id)}
-              >
-                <div className="timer-card-top">
-                  <span className="timer-number">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span>{time(t.duration)}</span>
-                  {t.id === timer?.id && <span className="active-dot" />}
-                </div>
-                <strong>{t.name}</strong>
-                <MiniSequence timer={t} />
-                <span className="timer-card-meta">
-                  {t.tracks.length} дорожек <span>·</span>{" "}
-                  {t.tracks.reduce((n, tr) => n + tr.events.length, 0)} событий
-                </span>
-              </button>
-            ))}
-          </div>
+          <TimerList
+            timers={timers}
+            activeId={timer?.id}
+            select={switchTimer}
+          />
           <div className="sidebar-bottom">
-            <span className="little-orbit">
-              <Activity size={20} />
+            <span>
+              Пробел <kbd>␣</kbd> запуск / пауза
             </span>
-            <p>
-              У времени есть ритм.
-              <br />
-              <span>Задайте свой.</span>
-            </p>
-            <button className="text-button" onClick={() => setModal("help")}>
-              <CircleHelp size={15} /> Быстрый старт
-            </button>
-            <span className="version">TIMEQUENCE / V.01</span>
+            <span>
+              Отменить <kbd>⌘ / Ctrl Z</kbd>
+            </span>
           </div>
         </aside>
         <main>
@@ -981,7 +1120,7 @@ export default function App() {
               <span className="empty-icon">
                 <TimerIcon size={38} />
               </span>
-              <h1>Время для вашего ритма</h1>
+              <h1>Ваш первый таймер</h1>
               <p>Создайте первый таймер и расставьте звуки на шкале.</p>
               <button
                 className="btn primary"
@@ -1005,11 +1144,19 @@ export default function App() {
             <>
               <div className="editor-heading">
                 <div>
-                  <div className="breadcrumb">
-                    Мои таймеры <span>/</span> <span>Редактор</span>
-                  </div>
                   <div className="title-row">
-                    <h1>{timer.name}</h1>
+                    <h1 className="desktop-timer-title" title={timer.name}>
+                      {timer.name}
+                    </h1>
+                    <button
+                      className="timer-switcher"
+                      aria-label={`Открыть список таймеров: ${timer.name}`}
+                      aria-haspopup="dialog"
+                      onClick={() => setModal("timers")}
+                    >
+                      <span>{timer.name}</span>
+                      <ChevronDown size={18} />
+                    </button>
                     <button
                       className="icon-btn title-edit"
                       title="Переименовать и настроить"
@@ -1020,38 +1167,19 @@ export default function App() {
                       <Pencil size={18} />
                     </button>
                   </div>
-                  <p className="editor-subtitle">
-                    Расставьте звуки. Почувствуйте свой ритм.
-                  </p>
                 </div>
                 <div className="heading-actions">
                   <button
-                    className="icon-btn"
+                    className="icon-btn desktop-action"
                     title="Создать копию таймера"
                     aria-label="Создать копию таймера"
                     disabled={locked || timers.length >= 100}
-                    onClick={() => {
-                      const copy: Timer = {
-                        ...structuredClone(timer),
-                        id: uid(),
-                        name: `${timer.name} — копия`.slice(0, 60),
-                        tracks: timer.tracks.map((t) => ({
-                          ...t,
-                          id: uid(),
-                          events: t.events.map((e) => ({ ...e, id: uid() })),
-                        })),
-                      };
-                      commit([...timers, copy]);
-                      setActiveId(copy.id);
-                      setSelection(null);
-                      setPosition(0);
-                      setToast("Копия таймера создана.");
-                    }}
+                    onClick={duplicateTimer}
                   >
                     <Copy size={18} />
                   </button>
                   <button
-                    className="icon-btn"
+                    className="icon-btn desktop-action"
                     title="Удалить таймер"
                     aria-label="Удалить таймер"
                     disabled={locked}
@@ -1060,11 +1188,12 @@ export default function App() {
                     <Trash2 size={18} />
                   </button>
                   <button
-                    className="btn secondary focus-button"
-                    onClick={() => setModal("focus")}
+                    className="icon-btn mobile-action"
+                    aria-label="Действия с таймером"
+                    aria-haspopup="dialog"
+                    onClick={() => setModal("timer-actions")}
                   >
-                    <Expand size={16} />
-                    Режим таймера
+                    <MoreHorizontal size={20} />
                   </button>
                 </div>
               </div>
@@ -1086,41 +1215,41 @@ export default function App() {
                       <ChevronDown size={13} />
                     </button>
                     <span className="toolbar-divider" />
-                    <div className="zoom-control">
-                      <span className="zoom-caption">Масштаб</span>
-                      <button
-                        className="icon-btn small"
-                        aria-label="Уменьшить масштаб"
-                        title="Отдалить"
-                        disabled={!!drag || timer.zoom <= MIN_ZOOM}
-                        onClick={() => changeZoom(timer.zoom - 0.25)}
-                      >
-                        <Minus size={15} />
-                      </button>
+                    <label className="step-control">
+                      <span>Шаг</span>
                       <input
-                        type="range"
-                        aria-label="Масштаб временной шкалы"
-                        aria-valuetext={`${Math.round(timer.zoom * 100)} процентов`}
-                        min="25"
-                        max="400"
-                        step="25"
-                        value={timer.zoom * 100}
-                        disabled={!!drag}
-                        onChange={(e) =>
-                          changeZoom(Number(e.target.value) / 100)
-                        }
+                        key={`${timer.id}:${timer.step}`}
+                        aria-label="Длительность шага в секундах"
+                        type="number"
+                        min="1"
+                        max={Math.floor(3600 / stepCount)}
+                        step="1"
+                        defaultValue={timer.step}
+                        disabled={locked || !!drag}
+                        onBlur={(e) => {
+                          const n = Number(e.currentTarget.value);
+                          if (
+                            !e.currentTarget.value ||
+                            !Number.isInteger(n) ||
+                            n < 1 ||
+                            n > Math.floor(3600 / stepCount)
+                          ) {
+                            e.currentTarget.value = String(timer.step);
+                            return;
+                          }
+                          changeStep(n);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.currentTarget.blur();
+                          if (e.key === "Escape") {
+                            e.currentTarget.value = String(timer.step);
+                            e.currentTarget.blur();
+                          }
+                        }}
+                        title="Длительность одной клетки. Изменение шага меняет темп всей последовательности."
                       />
-                      <button
-                        className="icon-btn small"
-                        aria-label="Увеличить масштаб"
-                        title="Приблизить"
-                        disabled={!!drag || timer.zoom >= MAX_ZOOM}
-                        onClick={() => changeZoom(timer.zoom + 0.25)}
-                      >
-                        <Plus size={15} />
-                      </button>
-                      <output>{Math.round(timer.zoom * 100)}%</output>
-                    </div>
+                      <span>сек</span>
+                    </label>
                   </div>
                   <div className="history-controls">
                     <button
@@ -1143,6 +1272,25 @@ export default function App() {
                     </button>
                     <span className="toolbar-divider" />
                     <button
+                      className={`icon-btn small ${inspectorOpen && selectedTrack ? "on" : ""}`}
+                      aria-label={
+                        inspectorOpen && selectedTrack
+                          ? "Скрыть настройки звука"
+                          : "Показать настройки звука"
+                      }
+                      aria-expanded={inspectorOpen && !!selectedTrack}
+                      aria-controls="sound-properties"
+                      disabled={!selectedTrack || locked}
+                      onClick={() =>
+                        inspectorOpen
+                          ? closeInspector()
+                          : setInspectorOpen(true)
+                      }
+                      title="Настройки выбранного звука"
+                    >
+                      <SlidersHorizontal size={18} />
+                    </button>
+                    <button
                       className={`icon-btn small ${timer.loop ? "on" : ""}`}
                       title="Зациклить таймер"
                       aria-label="Зациклить таймер"
@@ -1156,190 +1304,282 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-                <div className="sequence-scroll" ref={stageRef}>
-                  <div
-                    className="sequence-inner"
-                    style={
-                      {
-                        "--timeline-width": `${gridWidth}px`,
-                        "--track-label": "184px",
-                      } as CSSProperties
-                    }
-                  >
-                    <div className="ruler-row">
-                      <div className="track-column-caption">
-                        ДОРОЖКИ{" "}
-                        <span>
-                          {timer.tracks.length.toString().padStart(2, "0")}
-                        </span>
-                      </div>
-                      <div
-                        className="ruler"
-                        style={{
-                          minWidth: gridWidth,
-                          width: gridWidth,
-                          flex: "0 0 auto",
-                        }}
-                        onClick={(e) => {
-                          if (!locked) {
-                            const r = e.currentTarget.getBoundingClientRect();
-                            setPosition(
-                              clamp(
-                                snapSecond(
-                                  ((e.clientX - r.left) / r.width) *
-                                    timer.duration,
-                                ),
-                                0,
-                                timer.duration,
-                              ),
-                            );
-                          }
-                        }}
-                        title="Нажмите, чтобы переместить указатель"
-                      >
-                        {rulerSeconds.map((second) => (
-                          <span
-                            key={second}
-                            style={{
-                              left: `${(second / timer.duration) * 100}%`,
-                            }}
-                          >
-                            {time(second)}
-                          </span>
-                        ))}
-                        <span className="ruler-end">
-                          {time(timer.duration)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="tracks-body">
-                      {timer.tracks.map((track, index) => {
-                        const SoundIcon =
-                          SOUND_ICONS[getSound(track.sound).icon];
-                        const isSelected = selection?.track === track.id;
-                        return (
-                          <div
-                            className={`track-row ${isSelected ? "track-selected" : ""} ${track.muted ? "muted-track" : ""}`}
-                            key={track.id}
-                          >
-                            <div className="track-label">
-                              <button
-                                className={`track-select ${isSelected ? "selected" : ""}`}
-                                onClick={() =>
-                                  setSelection({ track: track.id })
-                                }
-                              >
-                                <span
-                                  className={`sound-icon color-${track.color}`}
-                                >
-                                  <SoundIcon size={21} strokeWidth={1.6} />
-                                </span>
-                                <span>
-                                  <strong>{track.name}</strong>
-                                  <small>
-                                    Дорожка {String(index + 1).padStart(2, "0")}
-                                  </small>
-                                </span>
-                              </button>
-                              <button
-                                className="mute-button"
-                                aria-label={`${track.muted ? "Включить" : "Выключить"} ${track.name}`}
-                                aria-pressed={track.muted}
-                                title={
-                                  track.muted
-                                    ? "Включить дорожку"
-                                    : "Выключить дорожку"
-                                }
-                                disabled={locked}
-                                onClick={() =>
-                                  updateTrack(track.id, { muted: !track.muted })
-                                }
-                              >
-                                {track.muted ? (
-                                  <VolumeX size={15} />
-                                ) : (
-                                  <Volume2 size={15} />
-                                )}
-                              </button>
-                            </div>
-                            <div
-                              className="track-grid"
-                              data-track-row={track.id}
-                              style={{
-                                minWidth: gridWidth,
-                                width: gridWidth,
-                                flex: "0 0 auto",
-                                backgroundSize: `${pixelsPerSecond}px 100%`,
-                              }}
-                            >
-                              <div className="grid-cells">
-                                {visibleSeconds.map((second) => (
-                                  <button
-                                    key={second}
-                                    className="grid-cell"
-                                    style={{
-                                      left: second * pixelsPerSecond,
-                                      width: pixelsPerSecond,
-                                    }}
-                                    disabled={locked}
-                                    aria-label={`Добавить ${mode === "hit" ? "сигнал" : "протяжённый звук"}: ${track.name}, ${time(second)}`}
-                                    onClick={() => addEvent(track, second)}
-                                  >
-                                    <Plus size={14} />
-                                  </button>
-                                ))}
-                              </div>
-                              {track.events
-                                .filter(
-                                  (ev) =>
-                                    !(
-                                      drag?.moved &&
-                                      drag.event === ev.id &&
-                                      drag.target !== track.id
-                                    ),
-                                )
-                                .map((ev) => drawEvent(track, ev))}
-                              {drag?.moved &&
-                                drag.target === track.id &&
-                                drag.track !== track.id &&
-                                drawEvent(
-                                  track,
-                                  timer.tracks
-                                    .find((t) => t.id === drag.track)!
-                                    .events.find((e) => e.id === drag.event)!,
-                                )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div
-                        className="playhead-area"
-                        style={{ left: 184, width: gridWidth }}
-                        aria-hidden="true"
-                      >
+                <div
+                  className="sequence-viewport"
+                  style={
+                    {
+                      "--timeline-end-space": `${playheadCenter}px`,
+                    } as CSSProperties
+                  }
+                >
+                  <div className="sequence-scroll" ref={stageRef}>
+                    <div
+                      className="sequence-inner"
+                      style={
+                        {
+                          "--timeline-width": `${gridWidth}px`,
+                          "--cell-pitch": `${CELL_PITCH}px`,
+                        } as CSSProperties
+                      }
+                    >
+                      <div className="ruler-row">
+                        <div className="track-column-caption">Дорожки</div>
                         <div
-                          className={`playhead ${playing ? "is-playing" : ""}`}
+                          className="ruler"
                           style={{
-                            left: `${(position / timer.duration) * 100}%`,
+                            minWidth: gridWidth,
+                            width: gridWidth,
+                            flex: "0 0 auto",
                           }}
+                          onClick={(e) => {
+                            if (!locked) {
+                              const r = e.currentTarget.getBoundingClientRect();
+                              setPosition(
+                                clamp(
+                                  Math.floor(
+                                    (e.clientX - r.left) / CELL_PITCH,
+                                  ) * gridStep,
+                                  0,
+                                  timer.duration,
+                                ),
+                              );
+                            }
+                          }}
+                          title="Нажмите, чтобы переместить указатель"
                         >
-                          <i />
-                          <span />
+                          {visibleSteps.map((index) => (
+                            <span
+                              key={index}
+                              className={`ruler-step ${currentStep === index ? "is-current" : ""}`}
+                              style={{
+                                left: index * CELL_PITCH,
+                                width: CELL_PITCH,
+                              }}
+                              title={`Шаг ${index + 1} · ${time(index * gridStep)}`}
+                            >
+                              {index + 1}
+                            </span>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                    {timer.tracks.length === 0 && (
-                      <div className="empty-tracks">
-                        <Waves size={28} />
-                        <p>Добавьте первую дорожку, чтобы расставить звуки.</p>
+                      <div className="tracks-body">
+                        {timer.tracks.map((track) => {
+                          const SoundIcon =
+                            SOUND_ICONS[getSound(track.sound).icon];
+                          const isSelected = selection?.track === track.id;
+                          return (
+                            <div
+                              className={`track-row ${track.tickEvery ? "tick-track" : ""} color-${track.color} ${isSelected ? "track-selected" : ""} ${track.muted ? "muted-track" : ""}`}
+                              key={track.id}
+                            >
+                              <div className="track-label">
+                                <div
+                                  className={`track-select ${isSelected ? "selected" : ""}`}
+                                >
+                                  <button
+                                    className="track-icon-button"
+                                    aria-label={`Настройки дорожки: ${track.name}`}
+                                    title={`Настройки дорожки: ${track.name}`}
+                                    aria-pressed={isSelected}
+                                    aria-haspopup="dialog"
+                                    aria-expanded={
+                                      isSelected &&
+                                      !selectedEvent &&
+                                      inspectorOpen
+                                    }
+                                    disabled={locked}
+                                    onClick={() =>
+                                      setSelection({ track: track.id })
+                                    }
+                                  >
+                                    <span className="sound-icon">
+                                      <SoundIcon size={20} strokeWidth={1.6} />
+                                    </span>
+                                  </button>
+                                  <TrackName
+                                    name={track.name}
+                                    disabled={locked}
+                                    onActivate={() =>
+                                      setSelection({ track: track.id })
+                                    }
+                                    onRename={(name) =>
+                                      updateTrack(track.id, { name })
+                                    }
+                                  />
+                                </div>
+                                <button
+                                  className="mute-button"
+                                  aria-label={`${track.muted ? "Включить" : "Выключить"} ${track.name}`}
+                                  aria-pressed={track.muted}
+                                  title={
+                                    track.muted
+                                      ? "Включить дорожку"
+                                      : "Выключить дорожку"
+                                  }
+                                  disabled={
+                                    busy || (playing && !track.tickEvery)
+                                  }
+                                  onClick={() => {
+                                    const muted = !track.muted;
+                                    if (track.tickEvery)
+                                      engine.current.setTickMuted({
+                                        ...track,
+                                        muted,
+                                      });
+                                    updateTrack(track.id, { muted });
+                                  }}
+                                >
+                                  {track.muted ? (
+                                    <VolumeX size={15} />
+                                  ) : (
+                                    <Volume2 size={15} />
+                                  )}
+                                </button>
+                              </div>
+                              <div
+                                className="track-grid"
+                                data-track-row={track.id}
+                                data-tick-track={track.tickEvery || undefined}
+                                style={{
+                                  minWidth: gridWidth,
+                                  width: gridWidth,
+                                  flex: "0 0 auto",
+                                }}
+                              >
+                                {track.tickEvery ? (
+                                  <div className="grid-cells">
+                                    {visibleSteps.map((index) => {
+                                      const every = track.tickEvery!;
+                                      const from = index * gridStep;
+                                      const first = Math.max(
+                                        every,
+                                        Math.ceil(from / every) * every,
+                                      );
+                                      const hasTick =
+                                        first <
+                                        Math.min(
+                                          timer.duration,
+                                          from + gridStep,
+                                        );
+                                      const sounding =
+                                        playing &&
+                                        !track.muted &&
+                                        position >= every &&
+                                        position % every < 0.12 &&
+                                        index === currentStep;
+                                      return (
+                                        <button
+                                          key={index}
+                                          className={`grid-cell tick-cell ${hasTick ? "has-ticks" : ""} ${sounding ? "tick-sounding" : ""}`}
+                                          style={{ left: index * CELL_PITCH }}
+                                          disabled={locked}
+                                          aria-label={`Настройки тиков: ${track.name}, шаг ${index + 1}`}
+                                          title={`Тик каждые ${every} сек · настроить дорожку`}
+                                          onClick={() =>
+                                            setSelection({ track: track.id })
+                                          }
+                                        >
+                                          {hasTick && (
+                                            <span
+                                              className="tick-marks"
+                                              aria-hidden="true"
+                                            >
+                                              <i />
+                                              <i />
+                                              <i />
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="grid-cells">
+                                    {visibleSteps.map((index) => (
+                                      <button
+                                        key={index}
+                                        className={`grid-cell ${currentStep === index ? "is-current" : ""}`}
+                                        style={{
+                                          left: index * CELL_PITCH,
+                                        }}
+                                        disabled={locked}
+                                        aria-label={`Добавить звук: ${track.name}, шаг ${index + 1}, ${time(index * gridStep)}`}
+                                        onClick={() =>
+                                          addEvent(track, index * gridStep)
+                                        }
+                                      >
+                                        <Plus size={14} />
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {track.events
+                                  .filter(
+                                    (ev) =>
+                                      !(
+                                        drag?.moved &&
+                                        drag.event === ev.id &&
+                                        drag.target !== track.id
+                                      ),
+                                  )
+                                  .map((ev) => drawEvent(track, ev))}
+                                {drag?.moved &&
+                                  drag.target === track.id &&
+                                  drag.track !== track.id &&
+                                  drawEvent(
+                                    track,
+                                    timer.tracks
+                                      .find((t) => t.id === drag.track)!
+                                      .events.find((e) => e.id === drag.event)!,
+                                  )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    )}
+                      {timer.tracks.length === 0 && (
+                        <div className="empty-tracks">
+                          <Waves size={28} />
+                          <p>
+                            Добавьте первую дорожку, чтобы расставить звуки.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  {timer.tracks.length > 0 && (
+                    <div
+                      className="playhead-area"
+                      aria-hidden="true"
+                      style={{
+                        left: viewport.label,
+                        top: viewport.ruler,
+                        width: viewport.width - viewport.label,
+                        height: Math.max(
+                          0,
+                          Math.min(
+                            timer.tracks.length * CELL_PITCH - viewport.top,
+                            viewport.height - viewport.ruler,
+                          ),
+                        ),
+                      }}
+                    >
+                      <div
+                        className={`playhead ${playing ? "is-playing" : ""}`}
+                        ref={playheadRef}
+                      >
+                        <i />
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="sequencer-footer">
                   <button
                     className="add-track"
-                    disabled={locked || timer.tracks.length >= 16}
+                    disabled={
+                      locked ||
+                      timer.tracks.filter((t) => !t.tickEvery).length >= 16
+                    }
                     onClick={() => {
                       setSoundAction("add");
                       stopPreview();
@@ -1351,91 +1591,86 @@ export default function App() {
                     <Plus size={17} />
                     Добавить дорожку
                   </button>
-                  <div className="event-legend">
-                    <span>
-                      <i className="legend-hit" />
-                      Сигнал
-                    </span>
-                    <span>
-                      <i className="legend-hold" />
-                      Протяжённый звук
-                    </span>
-                  </div>
                 </div>
               </section>
-              <div className="grid-hint">
-                <span>
-                  <span className="hint-dot" />
-                  {locked
-                    ? "Таймер звучит. Поставьте на паузу, чтобы изменить последовательность."
-                    : "Клетка — 1 секунда. Нажмите, чтобы добавить звук. Приближайте шкалу для точной настройки."}
-                </span>
-                <span className="snap-label">
-                  <span />1 клетка = 1 секунда
-                </span>
-              </div>
-              <section
-                className="properties"
-                aria-label="Настройки выбранного звука"
-              >
-                <div className="properties-header">
-                  <span className="eyebrow">
-                    {selectedTrack
-                      ? "НАСТРОЙКИ ЗВУКА"
-                      : "ВАША ПОСЛЕДОВАТЕЛЬНОСТЬ"}
-                  </span>
-                  <span>
-                    {selectedEvent
-                      ? `Событие в ${time(selectedEvent.at)}`
-                      : selectedTrack
-                        ? `${selectedTrack.events.length} событий на дорожке`
-                        : `${timer.tracks.length} дорожек · ${totalEvents} событий`}
-                  </span>
-                  {selectedEvent && (
+              {selectedTrack && inspectorOpen && (
+                <SettingsPopover
+                  anchorKey={
+                    selectedEvent
+                      ? `${selectedEvent.id}:${selectedEvent.at}`
+                      : selectedTrack.id
+                  }
+                  getAnchor={() =>
+                    stageRef.current?.querySelector<HTMLElement>(
+                      selectedEvent
+                        ? ".sound-event.selected"
+                        : ".track-select.selected",
+                    ) ?? null
+                  }
+                  suspended={!!modal || !!drag}
+                  onDismiss={closeInspector}
+                >
+                  <div className="properties-header">
+                    <strong>{selectedEvent ? "Событие" : "Дорожка"}</strong>
+                    <span>
+                      {selectedEvent
+                        ? time(selectedEvent.at)
+                        : selectedTrack.tickEvery
+                          ? `Каждые ${selectedTrack.tickEvery} сек`
+                          : countLabel(selectedTrack.events.length, [
+                              "событие",
+                              "события",
+                              "событий",
+                            ])}
+                    </span>
+                    {selectedEvent && (
+                      <button
+                        className="icon-btn small"
+                        aria-label="Удалить событие"
+                        title="Удалить событие · Delete"
+                        disabled={locked}
+                        onClick={() => {
+                          removeEvent();
+                          setInspectorOpen(false);
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
                     <button
-                      className="icon-btn small"
-                      aria-label="Удалить событие"
-                      title="Удалить событие · Delete"
-                      disabled={locked}
-                      onClick={removeEvent}
+                      className="icon-btn small properties-close"
+                      aria-label="Закрыть настройки звука"
+                      title="Закрыть настройки · Esc"
+                      onClick={() => closeInspector()}
                     >
-                      <Trash2 size={15} />
+                      <X size={18} />
                     </button>
-                  )}
-                </div>
-                {selectedTrack ? (
+                  </div>
                   <div className="properties-content">
                     <div className="sound-preview">
+                      <span className="property-label">Звук дорожки</span>
                       <div className="sound-preview-title">
-                        <strong>{selectedTrack.name}</strong>
-                        <button
-                          className="text-button"
-                          disabled={locked}
-                          onClick={() => {
-                            setSoundAction("replace");
-                            setSoundChoice(selectedTrack.sound);
-                            stopPreview();
-                            setSoundGroup(getSound(selectedTrack.sound).kind);
-                            setModal("sounds");
-                          }}
-                        >
-                          Изменить <ChevronDown size={12} />
-                        </button>
+                        <strong>{getSound(selectedTrack.sound).name}</strong>
+                        {!selectedTrack.tickEvery && (
+                          <button
+                            className="text-button"
+                            disabled={locked}
+                            onClick={() => {
+                              setSoundAction("replace");
+                              setSoundChoice(selectedTrack.sound);
+                              stopPreview();
+                              setSoundGroup(getSound(selectedTrack.sound).kind);
+                              setModal("sounds");
+                            }}
+                          >
+                            Изменить <ChevronDown size={12} />
+                          </button>
+                        )}
                       </div>
-                      <div
-                        className={`wave-preview color-${selectedTrack.color}`}
-                      >
-                        <Waveform
-                          large
-                          sound={selectedTrack.sound}
-                          seed={
-                            sounds.findIndex(
-                              (s) => s.id === selectedTrack.sound,
-                            ) + 2
-                          }
-                        />
+                      <div className="sound-options">
                         <button
                           className="preview-play"
+                          title="Послушать звук"
                           aria-label={
                             previewState?.sound === selectedTrack.sound
                               ? "Остановить прослушивание"
@@ -1456,132 +1691,99 @@ export default function App() {
                             <Play size={14} fill="currentColor" />
                           )}
                         </button>
-                      </div>
-                      <div className="track-volume">
-                        <Volume2 size={13} />
-                        <input
-                          aria-label="Громкость дорожки"
-                          type="range"
-                          min="0"
-                          max="100"
-                          disabled={locked}
-                          value={selectedTrack.volume}
-                          onChange={(e) =>
-                            updateTrack(selectedTrack.id, {
-                              volume: Number(e.target.value),
-                            })
-                          }
-                        />
-                        <span>{selectedTrack.volume}%</span>
-                        <button
-                          className="icon-btn tiny"
-                          title="Удалить дорожку"
-                          aria-label="Удалить дорожку"
-                          disabled={locked}
-                          onClick={() => {
-                            updateTimer({
-                              ...timer,
-                              tracks: timer.tracks.filter(
-                                (t) => t.id !== selectedTrack.id,
-                              ),
-                            });
-                            setSelection(null);
-                            setToast(
-                              "Дорожка удалена. Нажмите «Отменить», чтобы вернуть её.",
-                            );
-                          }}
+                        <div
+                          className="track-colors"
+                          role="group"
+                          aria-label="Цвет дорожки"
                         >
-                          <Trash2 size={14} />
-                        </button>
+                          {trackColors.map((color) => (
+                            <button
+                              key={color.id}
+                              className={`color-swatch color-${color.id}`}
+                              aria-label={`Цвет дорожки: ${color.name}`}
+                              aria-pressed={selectedTrack.color === color.id}
+                              title={color.name}
+                              disabled={locked}
+                              onClick={() =>
+                                updateTrack(selectedTrack.id, {
+                                  color: color.id,
+                                })
+                              }
+                            >
+                              {selectedTrack.color === color.id && (
+                                <Check size={12} strokeWidth={2.5} />
+                              )}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="event-mode">
-                      <label>
-                        {selectedEvent ? "Тип события" : "Новые события"}
-                      </label>
-                      <div className="segmented">
-                        <button
-                          disabled={locked}
-                          className={
-                            (selectedEvent?.mode ?? mode) === "hit"
-                              ? "active"
-                              : ""
-                          }
-                          aria-pressed={(selectedEvent?.mode ?? mode) === "hit"}
-                          onClick={() => {
-                            setMode("hit");
-                            if (selectedEvent)
-                              updateEvent({ mode: "hit", duration: 1 });
-                          }}
-                        >
-                          <span className="legend-hit" />
-                          Сигнал
-                        </button>
-                        <button
-                          disabled={locked}
-                          className={
-                            (selectedEvent?.mode ?? mode) === "hold"
-                              ? "active"
-                              : ""
-                          }
-                          aria-pressed={
-                            (selectedEvent?.mode ?? mode) === "hold"
-                          }
-                          onClick={() => {
-                            setMode("hold");
-                            if (selectedEvent)
-                              updateEvent({
-                                mode: "hold",
-                                duration: Math.min(
-                                  10,
-                                  timer.duration - selectedEvent.at,
+                      {!selectedEvent && (
+                        <div className="track-volume">
+                          <Volume2 size={13} />
+                          <input
+                            aria-label="Громкость дорожки"
+                            type="range"
+                            min="0"
+                            max="100"
+                            disabled={locked}
+                            value={selectedTrack.volume}
+                            onChange={(e) =>
+                              updateTrack(selectedTrack.id, {
+                                volume: Number(e.target.value),
+                              })
+                            }
+                          />
+                          <span>{selectedTrack.volume}%</span>
+                          <button
+                            className="icon-btn tiny"
+                            title="Удалить дорожку"
+                            aria-label="Удалить дорожку"
+                            disabled={locked}
+                            onClick={() => {
+                              updateTimer({
+                                ...timer,
+                                tracks: timer.tracks.filter(
+                                  (t) => t.id !== selectedTrack.id,
                                 ),
                               });
-                          }}
-                        >
-                          <span className="legend-hold" />
-                          Звук
-                        </button>
-                      </div>
-                      <p>
-                        {(selectedEvent?.mode ?? mode) === "hit"
-                          ? getSound(selectedTrack.sound).kind === "sample"
-                            ? "Один удар с естественным затуханием"
-                            : "Короткая отсечка в нужный момент"
-                          : getSound(selectedTrack.sound).kind === "sample"
-                            ? "Запись повторяется до конца события"
-                            : "Звучит всю заданную длительность"}
-                      </p>
+                              setSelection(null);
+                              setToast(
+                                "Дорожка удалена. Нажмите «Отменить», чтобы вернуть её.",
+                              );
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {selectedEvent ? (
                       <>
                         <div className="event-timing">
                           <label>
-                            Начало, сек
+                            Шаг
                             <input
                               key={`${selectedEvent.id}-${selectedEvent.at}`}
                               type="number"
-                              aria-label="Начало события в секундах"
-                              min="0"
-                              max={
-                                timer.duration -
-                                (selectedEvent.mode === "hold"
-                                  ? selectedEvent.duration
-                                  : 1)
-                              }
+                              aria-label="Шаг события"
+                              min="1"
+                              max={stepCount}
                               step="1"
                               disabled={locked}
-                              defaultValue={selectedEvent.at}
+                              defaultValue={selectedEvent.at / gridStep + 1}
                               onBlur={(e) => {
                                 const n = Number(e.target.value);
                                 if (!e.target.value || !Number.isFinite(n)) {
-                                  e.target.value = String(selectedEvent.at);
+                                  e.target.value = String(
+                                    selectedEvent.at / gridStep + 1,
+                                  );
                                   return;
                                 }
                                 const at = moveEvent(
                                   selectedEvent,
-                                  Math.round(n),
+                                  (Math.round(n) - 1) * gridStep,
                                   timer.duration,
+                                  gridStep,
                                 ).at;
                                 if (
                                   selectedTrack.events.some(
@@ -1590,42 +1792,13 @@ export default function App() {
                                       ev.at === at,
                                   )
                                 ) {
-                                  setToast("В этот момент уже есть сигнал.");
-                                  e.target.value = String(selectedEvent.at);
+                                  setToast("В этот момент уже есть звук.");
+                                  e.target.value = String(
+                                    selectedEvent.at / gridStep + 1,
+                                  );
                                 } else if (at !== selectedEvent.at)
                                   updateEvent({ at });
-                                else e.target.value = String(at);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") e.currentTarget.blur();
-                              }}
-                            />
-                          </label>
-                          <label>
-                            Длительность
-                            <input
-                              key={`${selectedEvent.id}-${selectedEvent.duration}-${selectedEvent.mode}`}
-                              aria-label="Длительность звука в секундах"
-                              type={
-                                selectedEvent.mode === "hit" ? "text" : "number"
-                              }
-                              min="1"
-                              max={timer.duration - selectedEvent.at}
-                              disabled={locked || selectedEvent.mode === "hit"}
-                              defaultValue={
-                                selectedEvent.mode === "hit"
-                                  ? "Отсечка"
-                                  : selectedEvent.duration
-                              }
-                              onBlur={(e) => {
-                                const duration = clamp(
-                                  Math.round(Number(e.target.value) || 1),
-                                  1,
-                                  timer.duration - selectedEvent.at,
-                                );
-                                if (duration !== selectedEvent.duration)
-                                  updateEvent({ duration });
-                                else e.target.value = String(duration);
+                                else e.target.value = String(at / gridStep + 1);
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") e.currentTarget.blur();
@@ -1638,27 +1811,29 @@ export default function App() {
                           <div className="repeat-input">
                             <input
                               id="repeat-every"
-                              aria-label="Интервал повторения в секундах"
+                              aria-label="Интервал повторения в шагах"
                               type="number"
                               min="1"
-                              max="3600"
+                              max={stepCount}
                               disabled={locked}
                               value={repeatEvery || ""}
                               onChange={(e) =>
                                 setRepeatEvery(Number(e.target.value))
                               }
                             />
-                            <span>сек</span>
+                            <span>шаг.</span>
                             <button
                               aria-label="Заполнить повторами до конца таймера"
                               title="Заполнить до конца таймера"
                               disabled={
-                                locked || repeatEvery < 1 || repeatEvery > 3600
+                                locked ||
+                                repeatEvery < 1 ||
+                                repeatEvery > stepCount
                               }
                               onClick={() => {
                                 const events = repeatEvent(
                                   selectedEvent,
-                                  Math.round(repeatEvery),
+                                  Math.round(repeatEvery) * gridStep,
                                   timer.duration,
                                   selectedTrack.events,
                                 );
@@ -1684,62 +1859,35 @@ export default function App() {
                       </>
                     ) : (
                       <div className="select-event-hint">
-                        <span>Выберите событие на сетке</span>
+                        <span>
+                          {selectedTrack.tickEvery
+                            ? `Тик каждые ${selectedTrack.tickEvery} сек`
+                            : "Выберите событие на сетке"}
+                        </span>
                         <p>
-                          Здесь можно точно настроить начало, длительность и
-                          повторы.
+                          {selectedTrack.tickEvery
+                            ? "По всему таймеру, независимо от шага. Выключается кнопкой звука на дорожке."
+                            : "Здесь можно задать момент сигнала и интервал повторов."}
                         </p>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="properties-empty">
-                    <span className="empty-icon">
-                      <SlidersHorizontal size={24} />
-                    </span>
-                    <div>
-                      <strong>Каждый звук — на своём месте</strong>
-                      <p>
-                        Выберите дорожку или событие, чтобы настроить звук,
-                        длительность и повторы.
-                      </p>
-                    </div>
-                    <div className="empty-mode">
-                      <span>Добавлять:</span>
-                      <button
-                        className={`btn small ${mode === "hit" ? "secondary" : ""}`}
-                        aria-pressed={mode === "hit"}
-                        onClick={() => setMode("hit")}
-                        disabled={locked}
-                      >
-                        Сигнал
-                      </button>
-                      <button
-                        className={`btn small ${mode === "hold" ? "secondary" : ""}`}
-                        aria-pressed={mode === "hold"}
-                        onClick={() => setMode("hold")}
-                        disabled={locked}
-                      >
-                        Протяжённый
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </section>
-              <section className="transport" aria-label="Воспроизведение">
-                <div className="transport-status">
-                  <span
-                    className={`transport-dot ${playing ? "playing" : ""}`}
-                  />
-                  <div>
-                    <strong>{nowLabel}</strong>
-                    <span>
-                      {timer.loop ? "Повтор включён" : "Один цикл"}{" "}
-                      <span>·</span> {totalEvents} событий
-                    </span>
-                  </div>
+                </SettingsPopover>
+              )}
+              <section
+                className="transport"
+                aria-label="Воспроизведение"
+                aria-busy={busy}
+              >
+                <div className="transport-time">
+                  <strong>{time(position)}</strong>
+                  <span>/ {time(timer.duration)}</span>
                 </div>
-                <div className="transport-center">
+                <div
+                  className="transport-center"
+                  role="group"
+                  aria-label="Способ воспроизведения"
+                >
                   <button
                     className="icon-btn restart"
                     aria-label="Вернуться в начало"
@@ -1761,7 +1909,9 @@ export default function App() {
                     }
                     title="Воспроизведение / пауза · Пробел"
                   >
-                    {playing ? (
+                    {busy ? (
+                      <LoaderCircle className="spinning" size={22} />
+                    ) : playing ? (
                       <Pause size={22} fill="currentColor" />
                     ) : (
                       <Play size={22} fill="currentColor" />
@@ -1776,10 +1926,34 @@ export default function App() {
                             : "Запустить"}
                     </span>
                   </button>
-                  <div className="transport-time">
-                    <strong>{time(position)}</strong>
-                    <span>/ {time(timer.duration)}</span>
-                  </div>
+                  <button
+                    className="play-mode zen-button"
+                    aria-label="Дзен-режим"
+                    aria-haspopup="dialog"
+                    title={
+                      playing ? "Открыть дзен-режим" : "Запустить в дзен-режиме"
+                    }
+                    disabled={busy}
+                    onClick={() => playInMode("zen")}
+                  >
+                    <Leaf size={18} />
+                    <span>Дзен</span>
+                  </button>
+                  <button
+                    className="play-mode focus-button"
+                    aria-label="Режим таймера"
+                    aria-haspopup="dialog"
+                    title={
+                      playing
+                        ? "Открыть режим таймера"
+                        : "Запустить в режиме таймера"
+                    }
+                    disabled={busy}
+                    onClick={() => playInMode("focus")}
+                  >
+                    <Expand size={18} />
+                    <span>Таймер</span>
+                  </button>
                 </div>
                 <div className="master-volume">
                   <Volume2 size={18} />
@@ -1795,16 +1969,6 @@ export default function App() {
                   <span>{volume}%</span>
                 </div>
               </section>
-              <footer className="editor-footer">
-                <span>
-                  <Headphones size={13} /> Создано для вашего ритма
-                </span>
-                <span>
-                  <kbd>space</kbd> воспроизведение{" "}
-                  <span className="footer-separator">/</span> <kbd>⌘ Z</kbd>{" "}
-                  отменить
-                </span>
-              </footer>
             </>
           )}
         </main>
@@ -1821,6 +1985,74 @@ export default function App() {
             <X size={16} />
           </button>
         </div>
+      )}
+      {modal === "timers" && (
+        <Dialog
+          label="Мои таймеры"
+          className="timers-dialog"
+          close={closeModal}
+        >
+          <h2>
+            Мои таймеры <span className="count">{timers.length}</span>
+          </h2>
+          <TimerList
+            timers={timers}
+            activeId={timer?.id}
+            select={(id) => {
+              switchTimer(id);
+              closeModal();
+            }}
+          />
+          {!timers.length && (
+            <p className="muted">
+              Создайте таймер, чтобы добавить свою последовательность.
+            </p>
+          )}
+          <button
+            className="btn primary full"
+            disabled={timers.length >= 100}
+            onClick={() => {
+              stop();
+              setModal("create");
+            }}
+          >
+            <Plus size={18} />
+            Новый таймер
+          </button>
+        </Dialog>
+      )}
+      {modal === "timer-actions" && timer && (
+        <Dialog
+          label="Действия с таймером"
+          className="actions-dialog"
+          close={closeModal}
+        >
+          <h2>{timer.name}</h2>
+          <div className="action-list">
+            <button disabled={locked} onClick={() => setModal("edit")}>
+              <Pencil size={18} />
+              Название и длительность
+            </button>
+            <button
+              disabled={locked || timers.length >= 100}
+              onClick={() => {
+                duplicateTimer();
+                closeModal();
+              }}
+            >
+              <Copy size={18} />
+              Создать копию
+            </button>
+            <button
+              className="danger-text"
+              disabled={locked}
+              onClick={() => setModal("delete")}
+            >
+              <Trash2 size={18} />
+              Удалить таймер
+            </button>
+          </div>
+        </Dialog>
       )}
       {(modal === "create" || modal === "edit") && (
         <Dialog
@@ -1852,9 +2084,7 @@ export default function App() {
           className="sounds-dialog"
           close={closeModal}
         >
-          <span className="eyebrow">БИБЛИОТЕКА ЗВУКОВ</span>
-          <h2>Как звучит ваш ритм?</h2>
-          <p className="muted">Выберите звук и послушайте, как он звучит.</p>
+          <h2>Выбрать звук</h2>
           <div className="segmented sound-tabs" aria-label="Тип звуков">
             <button
               className={soundGroup === "sample" ? "active" : ""}
@@ -1874,7 +2104,8 @@ export default function App() {
                 setSoundGroup("synth");
               }}
             >
-              Синтезатор <span>6</span>
+              Синтезатор{" "}
+              <span>{sounds.filter((s) => s.kind === "synth").length}</span>
             </button>
           </div>
           <div className="sound-library">
@@ -1942,8 +2173,10 @@ export default function App() {
                   const s = sounds.find((x) => x.id === soundChoice)!;
                   updateTrack(selectedTrack.id, {
                     sound: s.id,
-                    name: s.name,
-                    color: s.color,
+                    name:
+                      selectedTrack.name === getSound(selectedTrack.sound).name
+                        ? s.name
+                        : selectedTrack.name,
                   });
                 } else {
                   const t = makeTrack(soundChoice);
@@ -2013,21 +2246,16 @@ export default function App() {
           className="help-dialog"
           close={closeModal}
         >
-          <span className="eyebrow">БЫСТРЫЙ СТАРТ</span>
-          <h2>
-            Сначала время.
-            <br />
-            Потом ваш ритм.
-          </h2>
+          <h2>Как работает Timequence</h2>
           <div className="help-steps">
             <div>
               <span>01</span>
               <div>
-                <h3>Задайте длительность</h3>
+                <h3>Задайте шаг и длину</h3>
                 <p>
-                  Выберите длину таймера. Одна клетка всегда равна одной
-                  секунде. Масштаб приближает или отдаляет шкалу, не меняя время
-                  звуков.
+                  Выберите количество шагов и длительность одной клетки. Если
+                  увеличить шаг с 5 до 10 секунд, рисунок сохранится, а вся
+                  последовательность станет вдвое длиннее.
                 </p>
               </div>
             </div>
@@ -2036,20 +2264,22 @@ export default function App() {
               <div>
                 <h3>Добавьте звуки на дорожки</h3>
                 <p>
-                  Нажмите на пустую клетку. Переносите события между клетками и
-                  дорожками с точностью до секунды. Приблизьте шкалу для точной
-                  настройки или введите время в свойствах события.
+                  Нажмите на пустой квадрат. Переносите события между шагами и
+                  дорожками или укажите номер шага в свойствах сигнала. Номера
+                  над сеткой помогают ориентироваться в последовательности.
                 </p>
               </div>
             </div>
             <div>
               <span>03</span>
               <div>
-                <h3>Коротко или протяжённо</h3>
+                <h3>Задайте ритм действий</h3>
                 <p>
-                  «Сигнал» — короткая отсечка. «Звук» — событие с длительностью:
-                  тяните правый край или укажите секунды. Стрелки на клавиатуре
-                  перемещают выбранное событие.
+                  Каждый блок — короткий сигнал, до трёх секунд. Все блоки
+                  одинакового размера. Переименуйте дорожки и выберите им цвета.
+                  Например: вдох в 00:00, задержка в 00:04, выдох в 00:11,
+                  следующий вдох в 00:19. Интервалы между сигналами задают время
+                  действий.
                 </p>
               </div>
             </div>
@@ -2075,6 +2305,21 @@ export default function App() {
             Попробовать
             <ArrowRight size={17} />
           </button>
+        </Dialog>
+      )}
+      {modal === "zen" && timer && (
+        <Dialog label="Дзен-режим" className="zen-dialog" close={closeModal}>
+          <ZenMode
+            timer={timer}
+            position={position}
+            playing={playing}
+            busy={busy}
+            muted={volume === 0}
+            error={transportError}
+            onPlay={togglePlay}
+            onRestart={() => stop(true)}
+            onMute={toggleMute}
+          />
         </Dialog>
       )}
       {modal === "focus" && timer && (
@@ -2104,7 +2349,7 @@ export default function App() {
           </div>
           <div className="focus-tracks">
             {timer.tracks
-              .filter((t) => !t.muted)
+              .filter((t) => !t.muted && !t.tickEvery)
               .map((t) => {
                 const Icon = SOUND_ICONS[getSound(t.sound).icon];
                 return (

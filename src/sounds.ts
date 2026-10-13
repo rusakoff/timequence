@@ -1,6 +1,9 @@
 import { sampleMetadata } from "./sample-metadata.ts";
 
-export type SynthSoundId = "bell" | "pulse" | "wood" | "bowl" | "air" | "chime";
+export const MAX_SOUND_DURATION = 3;
+
+export type SynthSoundId =
+  "bell" | "pulse" | "wood" | "bowl" | "air" | "chime" | "tick" | "tick-accent";
 export type SampleSoundId = keyof typeof sampleMetadata;
 export type SoundId = SynthSoundId | SampleSoundId;
 export type SoundIcon = "bell" | "pulse" | "wood" | "bowl" | "air" | "chime";
@@ -33,7 +36,7 @@ const recordings: {
   {
     id: "hand-chime",
     name: "Ручной колокол",
-    detail: "Светлый тон с долгим послезвучием",
+    detail: "Мягкий металлический тон",
     color: "sage",
     icon: "bell",
   },
@@ -82,7 +85,7 @@ const recordings: {
   {
     id: "gong",
     name: "Гонг",
-    detail: "Глубокий удар с длинным хвостом",
+    detail: "Глубокий низкий удар",
     color: "sand",
     icon: "bowl",
   },
@@ -113,9 +116,27 @@ export const sounds: SoundDefinition[] = [
   ...recordings.map((sound): SoundDefinition => ({
     ...sound,
     kind: "sample",
-    file: `/audio/vcsl/${sound.id}.mp3`,
+    file: `/audio/vcsl/${sound.id}.mp3?v=short-3s`,
     ...sampleMetadata[sound.id],
   })),
+  {
+    id: "tick",
+    name: "Тик секундомера",
+    detail: "Тихий короткий щелчок",
+    color: "ink",
+    icon: "pulse",
+    kind: "synth",
+    duration: 0.04,
+  },
+  {
+    id: "tick-accent",
+    name: "Отсечка секундомера",
+    detail: "Чуть более звонкий щелчок",
+    color: "sand",
+    icon: "pulse",
+    kind: "synth",
+    duration: 0.07,
+  },
   {
     id: "bell",
     name: "Мягкий звон",

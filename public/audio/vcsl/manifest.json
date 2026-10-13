@@ -3,7 +3,7 @@
   "repository": "https://github.com/sgossner/VCSL",
   "commit": "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e",
   "license": "CC0-1.0",
-  "processing": "44.1 kHz stereo, silence trim, max 16s, active RMS normalization with -4 dBFS peak cap, fades, 192 kbps MP3",
+  "processing": "44.1 kHz stereo, silence trim, max 3s, active RMS normalization with -4 dBFS peak cap, fades, 192 kbps MP3",
   "samples": [
     {
       "id": "nepal-bell",
@@ -23,11 +23,11 @@
       "source": "Idiophones/Struck Idiophones/Hand Chimes/sus_C5_r01_main.wav",
       "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Hand%20Chimes/sus_C5_r01_main.wav",
       "sourceSha256": "836f13d448c9d6d685da634368615c2f7c03b6fb5b99ac93627e1fbb40368e58",
-      "outputSha256": "9cc56d567415b98e62d3c00e8bd3bca8e0b364969679e4cf5e0e32ad45bea2cb",
-      "duration": 6.4211,
+      "outputSha256": "feab4932e2d39d9180dea794e9b36fc1ec2335e9b8a6e6ffa10b12488d1ba974",
+      "duration": 3.0,
       "gainDb": 4.14,
       "trimStartSeconds": 0.0,
-      "bytes": 155523
+      "bytes": 73394
     },
     {
       "id": "glockenspiel",
@@ -35,11 +35,11 @@
       "source": "Idiophones/Struck Idiophones/Glockenspiel/glock_medium_C5_01.wav",
       "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Glockenspiel/glock_medium_C5_01.wav",
       "sourceSha256": "635f898e0bcb6975b96b18efd9c896f6f1b97ff12174a339ada4814e49675660",
-      "outputSha256": "da10aabdd3bf8cafe9394b973e70065f64bdd13edc678ff47753abf31306630d",
-      "duration": 4.2255,
+      "outputSha256": "a1295605b254cc4be3552b9f961260e21fbabd4e6ad47612aace7ab0869cb3da",
+      "duration": 3.0,
       "gainDb": 22.12,
       "trimStartSeconds": 0.0,
-      "bytes": 102861
+      "bytes": 73394
     },
     {
       "id": "vibraphone",
@@ -47,11 +47,11 @@
       "source": "Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_C3_v1_rr2_Main.wav",
       "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Vibraphone/Soft%20Mallets/Vibes_soft_C3_v1_rr2_Main.wav",
       "sourceSha256": "1dda9a4c3205c365345d66dcb68c8e09c0dca76a310b8fe8108e43c7e8c1cd0a",
-      "outputSha256": "23faa371fc6f2b4b99e65b8dac33dcaef40939d7dc7e0697916be8367cd50aac",
-      "duration": 6.7742,
+      "outputSha256": "84acd7c4c00157c1374671cdecb2e9f6ab19f434ad02dd0482cb14bd49761be1",
+      "duration": 3.0,
       "gainDb": 14.82,
       "trimStartSeconds": 0.0,
-      "bytes": 164301
+      "bytes": 73394
     },
     {
       "id": "marimba",
@@ -107,11 +107,11 @@
       "source": "Idiophones/Struck Idiophones/Gong 1/gong_2_mp.wav",
       "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Gong%201/gong_2_mp.wav",
       "sourceSha256": "8539b652ff19860549b705535ef7535e8255a675abf2f5a2429fc9eea59fb96e",
-      "outputSha256": "94be05a21229679687be23c6841548c53a165cc58e98e04895737cd9b7920f26",
-      "duration": 16.0,
+      "outputSha256": "52d3909b3719ce15b20fdf5d807200a511c126be9d543218734f7613b532c7c9",
+      "duration": 3.0,
       "gainDb": 14.99,
       "trimStartSeconds": 0.0,
-      "bytes": 385610
+      "bytes": 73394
     },
     {
       "id": "tubular-bell",
@@ -119,11 +119,11 @@
       "source": "Idiophones/Struck Idiophones/Tubular Bells 1/chimes_C4_p_rr1.wav",
       "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Tubular%20Bells%201/chimes_C4_p_rr1.wav",
       "sourceSha256": "c0f357155823646012c5d86628eedf122f162f813bfeed7337e72bf1a8d37c63",
-      "outputSha256": "472947d21b5f755b0b4ca11b1dc900fa458ee8c9f279a0d69e15e7d4173a7ef4",
-      "duration": 16.0,
+      "outputSha256": "ff0cac8829427cae0cbb1270417c64751d7f3c16e5fbd441f6fbb80f9860fa1a",
+      "duration": 3.0,
       "gainDb": 10.77,
       "trimStartSeconds": 0.0,
-      "bytes": 385610
+      "bytes": 73394
     },
     {
       "id": "shaker",

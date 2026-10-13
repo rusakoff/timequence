@@ -1,11 +1,8 @@
 import { sounds, type SoundId } from "./sounds.ts";
 export { sounds, type SoundId } from "./sounds.ts";
-export type EventMode = "hit" | "hold";
 export interface SoundEvent {
   id: string;
   at: number;
-  duration: number;
-  mode: EventMode;
 }
 export interface Track {
   id: string;
@@ -15,41 +12,81 @@ export interface Track {
   volume: number;
   muted: boolean;
   events: SoundEvent[];
+  tickEvery?: 1 | 5;
 }
 export interface Timer {
   id: string;
   name: string;
   duration: number;
-  zoom: number;
+  step: number;
   loop: boolean;
   tracks: Track[];
 }
 export const uid = () => crypto.randomUUID();
 export const clamp = (n: number, min: number, max: number) =>
   Math.max(min, Math.min(max, n));
-export const GRID_SECOND = 1;
-export const BASE_CELL_WIDTH = 32;
-export const MIN_ZOOM = 0.25;
-export const MAX_ZOOM = 4;
-export const DEFAULT_ZOOM = 0.5;
-export const snapSecond = (seconds: number) =>
-  Math.round(seconds / GRID_SECOND) * GRID_SECOND;
-export const rulerInterval = (pixelsPerSecond: number) =>
-  [1, 2, 5, 10, 15, 30, 60, 120].find(
-    (seconds) => seconds * pixelsPerSecond >= 58,
-  ) ?? 120;
+export const CELL_PITCH = 72;
+export const DEFAULT_STEP = 30;
+export const snapToStep = (seconds: number, step = 1) =>
+  Math.round(seconds / step) * step;
+
+/** Infer a common step without moving any of the existing cues. */
+export function inferStep(timer: Pick<Timer, "duration" | "tracks">): number {
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+  const times = [
+    timer.duration,
+    ...timer.tracks.flatMap((t) =>
+      Array.isArray(t?.events) ? t.events.map((e) => e?.at) : [],
+    ),
+  ];
+  if (!times.every(Number.isInteger)) return 1;
+  const common = times.reduce(gcd);
+  for (let step = Math.min(60, common); step >= 1; step--)
+    if (common % step === 0) return step;
+  return 1;
+}
+
+/** Keep cell indices and IDs, changing only the time each cell represents. */
+export function changeTimerStep(timer: Timer, step: number): Timer {
+  const steps = timer.duration / timer.step;
+  if (!Number.isInteger(step) || step < 1 || steps * step > 3600) return timer;
+  return {
+    ...timer,
+    step,
+    duration: steps * step,
+    tracks: timer.tracks.map((track) => ({
+      ...track,
+      events: track.events.map((event) => ({
+        ...event,
+        at: (event.at / timer.step) * step,
+      })),
+    })),
+  };
+}
 export const time = (seconds: number) =>
   `${String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, "0")}:${String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, "0")}`;
-export const eventEnd = (e: SoundEvent) =>
-  e.at + (e.mode === "hold" ? e.duration : 0);
+export const trackColors = [
+  { id: "ink", name: "Графитовый" },
+  { id: "orange", name: "Оранжевый" },
+  { id: "sand", name: "Песочный" },
+  { id: "sage", name: "Зелёный" },
+  { id: "clay", name: "Терракотовый" },
+  { id: "blue", name: "Бирюзовый" },
+] as const;
+export const makeEvent = (at: number): SoundEvent => ({ id: uid(), at });
 export function moveEvent(
   e: SoundEvent,
   at: number,
   length: number,
+  step = 1,
 ): SoundEvent {
   return {
     ...e,
-    at: clamp(snapSecond(at), 0, length - (e.mode === "hold" ? e.duration : 1)),
+    at: clamp(
+      snapToStep(at, step),
+      0,
+      Math.max(0, (Math.ceil(length / step) - 1) * step),
+    ),
   };
 }
 export function repeatEvent(
@@ -65,7 +102,6 @@ export function repeatEvent(
     at < length && result.length < 1000;
     at += every
   ) {
-    if (e.mode === "hold" && at + e.duration > length) break;
     if (!result.some((x) => Math.abs(x.at - at) < 0.01))
       result.push({ ...e, id: uid(), at });
   }
@@ -77,12 +113,7 @@ export function resizeTimer(timer: Timer, duration: number): Timer {
     duration,
     tracks: timer.tracks.map((t) => ({
       ...t,
-      events: t.events
-        .filter((e) => e.at < duration)
-        .map((e) => ({
-          ...e,
-          duration: Math.min(e.duration, duration - e.at),
-        })),
+      events: t.events.filter((e) => e.at < duration),
     })),
   };
 }
@@ -98,64 +129,35 @@ export const makeTrack = (sound: SoundId): Track => {
     events: [],
   };
 };
+
+export function makeTickTrack(every: 1 | 5): Track {
+  return {
+    ...makeTrack(every === 1 ? "tick" : "tick-accent"),
+    name: `Тик · ${every} с`,
+    color: every === 1 ? "ink" : "sand",
+    volume: every === 1 ? 28 : 38,
+    tickEvery: every,
+  };
+}
+
+/** Fixed-second ticks are independent of the editable step pattern. */
+export function withTickTracks(timer: Timer): Timer {
+  const missing = ([1, 5] as const).filter(
+    (every) => !timer.tracks.some((t) => t.tickEvery === every),
+  );
+  return missing.length
+    ? { ...timer, tracks: [...timer.tracks, ...missing.map(makeTickTrack)] }
+    : timer;
+}
+
 export const makeTimer = (name = "Новый таймер"): Timer => ({
   id: uid(),
   name,
   duration: 300,
-  zoom: DEFAULT_ZOOM,
+  step: DEFAULT_STEP,
   loop: false,
-  tracks: [makeTrack("nepal-bell")],
+  tracks: [makeTrack("nepal-bell"), makeTickTrack(1), makeTickTrack(5)],
 });
-export function initialTimers(): Timer[] {
-  const a = makeTimer("Мой ритм");
-  a.tracks = ["nepal-bell", "woodblock", "vibraphone", "bell-tree"].map((s) =>
-    makeTrack(s as SoundId),
-  );
-  a.tracks[0].events = [0, 60, 120, 180, 240].map((at) => ({
-    id: uid(),
-    at,
-    duration: 1,
-    mode: "hit",
-  }));
-  a.tracks[1].events = [30, 90, 150, 210, 270].map((at) => ({
-    id: uid(),
-    at,
-    duration: 1,
-    mode: "hit",
-  }));
-  a.tracks[2].events = [0, 120, 240].map((at) => ({
-    id: uid(),
-    at,
-    duration: 30,
-    mode: "hold",
-  }));
-  a.tracks[3].events = [{ id: uid(), at: 290, duration: 10, mode: "hold" }];
-  const b = makeTimer("Короткие интервалы");
-  b.duration = 180;
-  b.tracks[0].events = Array.from({ length: 18 }, (_, i) => ({
-    id: uid(),
-    at: i * 10,
-    duration: 1,
-    mode: "hit",
-  }));
-  const c = makeTimer("Тихая последовательность");
-  c.duration = 600;
-  c.zoom = MIN_ZOOM;
-  c.tracks = [makeTrack("gong"), makeTrack("hand-chime")];
-  c.tracks[0].events = [0, 120, 240, 360, 480].map((at) => ({
-    id: uid(),
-    at,
-    duration: 8,
-    mode: "hold",
-  }));
-  c.tracks[1].events = [60, 180, 300, 420, 540].map((at) => ({
-    id: uid(),
-    at,
-    duration: 20,
-    mode: "hold",
-  }));
-  return [a, b, c];
-}
 export function validTimers(value: unknown): value is Timer[] {
   if (!Array.isArray(value) || value.length > 100) return false;
   return value.every(
@@ -166,12 +168,18 @@ export function validTimers(value: unknown): value is Timer[] {
       Number.isFinite(t.duration) &&
       t.duration >= 1 &&
       t.duration <= 3600 &&
-      Number.isFinite(t.zoom) &&
-      t.zoom >= MIN_ZOOM &&
-      t.zoom <= MAX_ZOOM &&
+      Number.isInteger(t.step) &&
+      t.step >= 1 &&
+      t.step <= t.duration &&
       typeof t.loop === "boolean" &&
       Array.isArray(t.tracks) &&
-      t.tracks.length <= 16 &&
+      t.tracks.filter((tr: Track) => !tr?.tickEvery).length <= 16 &&
+      t.tracks.filter((tr: Track) => tr?.tickEvery).length <= 2 &&
+      new Set(
+        t.tracks
+          .filter((tr: Track) => tr?.tickEvery)
+          .map((tr: Track) => tr.tickEvery),
+      ).size === t.tracks.filter((tr: Track) => tr?.tickEvery).length &&
       t.tracks.every(
         (tr: Track) =>
           tr &&
@@ -185,6 +193,10 @@ export function validTimers(value: unknown): value is Timer[] {
           tr.volume <= 100 &&
           Array.isArray(tr.events) &&
           tr.events.length <= 1000 &&
+          (tr.tickEvery === undefined ||
+            ([1, 5].includes(tr.tickEvery) &&
+              tr.events.length === 0 &&
+              tr.sound === (tr.tickEvery === 1 ? "tick" : "tick-accent"))) &&
           tr.events.every(
             (e) =>
               e &&
@@ -192,35 +204,54 @@ export function validTimers(value: unknown): value is Timer[] {
               Number.isFinite(e.at) &&
               e.at >= 0 &&
               e.at < t.duration &&
-              ["hit", "hold"].includes(e.mode) &&
-              Number.isFinite(e.duration) &&
-              e.duration > 0 &&
-              (e.mode === "hit" || eventEnd(e) <= t.duration),
+              !("mode" in e) &&
+              !("duration" in e),
           ),
       ),
   );
 }
 
-/** Preserve existing events when loading the former step-based format. */
+/** Keep cue positions and IDs when migrating the former variable-length blocks. */
 export function restoreTimers(value: unknown): Timer[] | null {
   if (validTimers(value)) return value;
   if (!Array.isArray(value)) return null;
   const migrated = value.map((timer) => {
+    if (!timer || typeof timer !== "object") return timer;
+    if (!Array.isArray(timer.tracks)) return timer;
     if (
-      !timer ||
-      typeof timer !== "object" ||
-      "zoom" in timer ||
-      ![5, 10, 15, 30, 60].includes(timer.step)
+      "zoom" in timer &&
+      (!Number.isFinite(timer.zoom) || timer.zoom < 0.25 || timer.zoom > 4)
     )
       return timer;
-    const { step, ...rest } = timer;
+    const { zoom, ...next } = timer;
+    if (!("step" in next)) next.step = inferStep(next);
     return {
-      ...rest,
-      zoom: clamp(
-        Math.round((68 / step / BASE_CELL_WIDTH) * 4) / 4,
-        MIN_ZOOM,
-        MAX_ZOOM,
-      ),
+      ...next,
+      tracks: next.tracks.map((track: Track) => {
+        if (
+          !track ||
+          !Array.isArray(track.events) ||
+          !sounds.some((s) => s.id === track.sound)
+        )
+          return track;
+        return {
+          ...track,
+          events: track.events.map(
+            (event: SoundEvent & { mode?: string; duration?: number }) => {
+              if (!event || typeof event !== "object") return event;
+              if (!("duration" in event)) return event;
+              if (
+                !Number.isFinite(event.duration) ||
+                event.duration! <= 0 ||
+                ("mode" in event && !["hit", "hold"].includes(event.mode ?? ""))
+              )
+                return event;
+              const { duration, mode, ...rest } = event;
+              return rest;
+            },
+          ),
+        };
+      }),
     };
   });
   return validTimers(migrated) ? migrated : null;

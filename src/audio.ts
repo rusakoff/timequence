@@ -1,10 +1,10 @@
-import { clamp, type SoundId, type Timer } from "./model.ts";
-import { getSound, type SynthSoundId } from "./sounds.ts";
+import { clamp, type SoundId, type Timer, type Track } from "./model.ts";
+import { getSound, MAX_SOUND_DURATION, type SynthSoundId } from "./sounds.ts";
 
 // Share decoded recordings between the editor preview and timer transport.
 // Failed requests are evicted so the same button can retry after reconnecting.
 const sampleCache = new Map<string, Promise<AudioBuffer>>();
-const loopCache = new WeakMap<AudioBuffer, AudioBuffer>();
+const synthCache = new Map<string, Promise<AudioBuffer>>();
 
 export class SampleLoadError extends Error {}
 
@@ -34,22 +34,84 @@ function loadSample(ctx: AudioContext, sound: SoundId): Promise<AudioBuffer> {
   return pending;
 }
 
-function loopBuffer(ctx: AudioContext, buffer: AudioBuffer): AudioBuffer {
-  // Very short percussion repeats no faster than once every 0.75 s.
-  // Prepared files have faded endpoints, so a full-recording loop cannot click.
-  if (buffer.duration >= 0.75) return buffer;
-  let padded = loopCache.get(buffer);
-  if (!padded) {
-    padded = ctx.createBuffer(
-      buffer.numberOfChannels,
-      Math.ceil(buffer.sampleRate * 0.75),
-      buffer.sampleRate,
-    );
-    for (let channel = 0; channel < buffer.numberOfChannels; channel++)
-      padded.copyToChannel(buffer.getChannelData(channel), channel);
-    loopCache.set(buffer, padded);
+// Render each synthesized cue once and share the same one-shot playback path.
+function loadSound(ctx: AudioContext, sound: SoundId): Promise<AudioBuffer> {
+  const definition = getSound(sound);
+  if (definition.kind === "sample") return loadSample(ctx, sound);
+  const key = `${sound}:${ctx.sampleRate}`;
+  let pending = synthCache.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const duration = definition.duration;
+      const offline = new OfflineAudioContext(
+        1,
+        Math.ceil(ctx.sampleRate * duration),
+        ctx.sampleRate,
+      );
+      const gain = offline.createGain();
+      gain.connect(offline.destination);
+      gain.gain.setValueAtTime(0, 0);
+      gain.gain.linearRampToValueAtTime(
+        0.24,
+        Math.min(
+          sound.startsWith("tick") ? 0.001 : sound === "air" ? 0.3 : 0.015,
+          duration / 4,
+        ),
+      );
+      gain.gain.exponentialRampToValueAtTime(0.0001, duration - 0.002);
+      gain.gain.linearRampToValueAtTime(0, duration);
+      const schedule = (source: AudioScheduledSourceNode) => {
+        source.start(0);
+        source.stop(duration);
+      };
+      if (sound === "air" || sound === "wood") {
+        const buffer = offline.createBuffer(
+          1,
+          Math.ceil(offline.sampleRate * duration),
+          offline.sampleRate,
+        );
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        const source = offline.createBufferSource();
+        source.buffer = buffer;
+        const filter = offline.createBiquadFilter();
+        filter.type = sound === "air" ? "lowpass" : "bandpass";
+        filter.frequency.value = sound === "air" ? 900 : 600;
+        filter.Q.value = sound === "air" ? 0.7 : 9;
+        source.connect(filter);
+        filter.connect(gain);
+        schedule(source);
+      } else {
+        const frequencies: Record<
+          Exclude<SynthSoundId, "air" | "wood">,
+          number[]
+        > = {
+          bell: [660, 1320],
+          pulse: [440],
+          bowl: [174, 348, 522],
+          chime: [784, 988, 1175],
+          tick: [1600, 3200],
+          "tick-accent": [1100, 2200],
+        };
+        frequencies[sound as Exclude<SynthSoundId, "air" | "wood">].forEach(
+          (frequency, index) => {
+            const oscillator = offline.createOscillator();
+            oscillator.type = sound === "pulse" ? "triangle" : "sine";
+            oscillator.frequency.value = frequency;
+            const partial = offline.createGain();
+            partial.gain.value = 1 / (index + 1);
+            oscillator.connect(partial);
+            partial.connect(gain);
+            schedule(oscillator);
+          },
+        );
+      }
+      return offline.startRendering();
+    })();
+    synthCache.set(key, pending);
+    void pending.catch(() => synthCache.delete(key));
   }
-  return padded;
+  return pending;
 }
 
 // Events are scheduled against the audio clock, never against rendering frames.
@@ -58,6 +120,8 @@ export class AudioEngine {
   master: GainNode | null = null;
   sources = new Set<AudioScheduledSourceNode>();
   private cleanups = new Map<AudioScheduledSourceNode, () => void>();
+  private tickGains = new Map<string, GainNode>();
+  private tickBuffers = new Map<string, AudioBuffer>();
   startedAt = 0;
   offset = 0;
   running = false;
@@ -87,6 +151,15 @@ export class AudioEngine {
         0.02,
       );
   }
+  setTickMuted(track: Track) {
+    const gain = this.tickGains.get(track.id);
+    if (gain && this.context)
+      gain.gain.setTargetAtTime(
+        track.muted ? 0 : track.volume / 100,
+        this.context.currentTime,
+        0.005,
+      );
+  }
   get position() {
     return this.running && this.context
       ? this.offset + Math.max(0, this.context.currentTime - this.startedAt)
@@ -107,6 +180,7 @@ export class AudioEngine {
     }
     this.sources.clear();
     this.cleanups.clear();
+    this.tickGains.clear();
   }
   private track(source: AudioScheduledSourceNode, cleanup: () => void) {
     this.sources.add(source);
@@ -129,15 +203,16 @@ export class AudioEngine {
     if (generation !== this.generation) return false;
     this.setVolume(volume);
     const activeTracks = timer.tracks.filter(
-      (track) => !track.muted && track.volume > 0 && track.events.length > 0,
+      (track) =>
+        track.tickEvery ||
+        (!track.muted && track.volume > 0 && track.events.length > 0),
     );
     const buffers = new Map<SoundId, AudioBuffer>();
     try {
       await Promise.all(
         [...new Set(activeTracks.map((track) => track.sound))].map(
           async (sound) => {
-            if (getSound(sound).kind === "sample")
-              buffers.set(sound, await loadSample(ctx, sound));
+            buffers.set(sound, await loadSound(ctx, sound));
           },
         ),
       );
@@ -149,16 +224,20 @@ export class AudioEngine {
     this.offset = position;
     this.startedAt = ctx.currentTime + 0.06;
     this.running = true;
-    activeTracks.forEach((track) =>
+    activeTracks.forEach((track) => {
+      if (track.tickEvery) {
+        this.startTicks(
+          track,
+          buffers.get(track.sound)!,
+          timer.duration,
+          position,
+        );
+        return;
+      }
       track.events.forEach((e) => {
-        const buffer = buffers.get(track.sound);
-        const duration =
-          e.mode === "hit" ? (buffer?.duration ?? 0.65) : e.duration;
-        if (
-          e.at < position &&
-          (e.at + duration <= position || (e.mode === "hit" && !buffer))
-        )
-          return;
+        const buffer = buffers.get(track.sound)!;
+        const duration = Math.min(buffer.duration, MAX_SOUND_DURATION);
+        if (e.at + duration <= position) return;
         const elapsed = Math.max(0, position - e.at);
         const remaining = Math.min(
           duration - elapsed,
@@ -166,27 +245,56 @@ export class AudioEngine {
         );
         if (remaining > 0) {
           const at = this.startedAt + Math.max(0, e.at - position);
-          if (buffer)
-            this.sample(
-              buffer,
-              at,
-              remaining,
-              track.volume / 100,
-              e.mode === "hold",
-              elapsed,
-            );
-          else
-            this.synth(
-              track.sound as SynthSoundId,
-              at,
-              remaining,
-              track.volume / 100,
-              e.mode === "hold",
-            );
+          this.sample(buffer, at, remaining, track.volume / 100, elapsed);
         }
-      }),
-    );
+      });
+    });
     return true;
+  }
+
+  /** A short click followed by silence loops on the audio clock with no JS drift. */
+  private startTicks(
+    track: Track,
+    click: AudioBuffer,
+    duration: number,
+    position: number,
+  ) {
+    const ctx = this.context!;
+    const every = track.tickEvery!;
+    const at = this.startedAt + Math.max(0, every - position);
+    const end = this.startedAt + duration - position;
+    if (at >= end) return;
+    const key = `${track.sound}:${every}`;
+    let buffer = this.tickBuffers.get(key);
+    if (!buffer) {
+      const length = Math.ceil(ctx.sampleRate * every);
+      buffer = ctx.createBuffer(click.numberOfChannels, length, ctx.sampleRate);
+      for (let channel = 0; channel < click.numberOfChannels; channel++)
+        buffer.copyToChannel(
+          click.getChannelData(channel).subarray(0, length),
+          channel,
+        );
+      this.tickBuffers.set(key, buffer);
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(
+      track.muted ? 0 : track.volume / 100,
+      ctx.currentTime,
+    );
+    this.tickGains.set(track.id, gain);
+    source.connect(gain);
+    gain.connect(this.master!);
+    this.track(source, () => {
+      gain.disconnect();
+      if (this.tickGains.get(track.id) === gain)
+        this.tickGains.delete(track.id);
+    });
+    // The first pulse is after one complete interval, not at the timer's start.
+    source.start(at, position < every ? 0 : position % every);
+    source.stop(end);
   }
   async preview(
     sound: SoundId,
@@ -199,10 +307,9 @@ export class AudioEngine {
     const ctx = await this.ready();
     if (generation !== this.generation) return false;
     this.setVolume(masterVolume);
-    let buffer: AudioBuffer | undefined;
+    let buffer: AudioBuffer;
     try {
-      if (getSound(sound).kind === "sample")
-        buffer = await loadSample(ctx, sound);
+      buffer = await loadSound(ctx, sound);
     } catch (error) {
       if (generation !== this.generation) return false;
       throw error;
@@ -211,25 +318,14 @@ export class AudioEngine {
     const finished = () => {
       if (generation === this.generation) onEnded();
     };
-    if (buffer)
-      this.sample(
-        buffer,
-        ctx.currentTime + 0.02,
-        buffer.duration,
-        volume / 100,
-        false,
-        0,
-        finished,
-      );
-    else
-      this.synth(
-        sound as SynthSoundId,
-        ctx.currentTime + 0.02,
-        0.8,
-        volume / 100,
-        false,
-        finished,
-      );
+    this.sample(
+      buffer,
+      ctx.currentTime + 0.02,
+      Math.min(buffer.duration, MAX_SOUND_DURATION),
+      volume / 100,
+      0,
+      finished,
+    );
     return true;
   }
   private sample(
@@ -237,14 +333,13 @@ export class AudioEngine {
     at: number,
     duration: number,
     volume: number,
-    held: boolean,
     elapsed: number,
     onEnded = () => {},
   ) {
     const ctx = this.context!;
     const source = ctx.createBufferSource();
-    source.buffer = held ? loopBuffer(ctx, buffer) : buffer;
-    source.loop = held;
+    source.buffer = buffer;
+    source.loop = false;
     const gain = ctx.createGain();
     const level = clamp(volume, 0, 1);
     const end = at + duration;
@@ -253,10 +348,7 @@ export class AudioEngine {
       level,
       at + Math.min(elapsed > 0 ? 0.01 : 0.002, duration / 4),
     );
-    gain.gain.setValueAtTime(
-      level,
-      end - Math.min(held ? 0.1 : 0.04, duration / 3),
-    );
+    gain.gain.setValueAtTime(level, end - Math.min(0.03, duration / 3));
     gain.gain.linearRampToValueAtTime(0, end);
     source.connect(gain);
     gain.connect(this.master!);
@@ -264,84 +356,7 @@ export class AudioEngine {
       gain.disconnect();
       onEnded();
     });
-    source.start(at, held ? elapsed % source.buffer.duration : elapsed);
+    source.start(at, Math.min(elapsed, buffer.duration));
     source.stop(end);
-  }
-  private synth(
-    sound: SynthSoundId,
-    at: number,
-    duration: number,
-    volume: number,
-    held: boolean,
-    onEnded = () => {},
-  ) {
-    const ctx = this.context!;
-    const gain = ctx.createGain();
-    gain.connect(this.master!);
-    const level = clamp(volume, 0, 1) * 0.24;
-    const end = at + duration;
-    gain.gain.setValueAtTime(0, at);
-    gain.gain.linearRampToValueAtTime(
-      level,
-      at + Math.min(sound === "air" ? 0.3 : 0.015, duration / 4),
-    );
-    if (held) {
-      gain.gain.setValueAtTime(
-        level * 0.75,
-        Math.max(at + duration / 4, end - Math.min(0.3, duration / 3)),
-      );
-      gain.gain.linearRampToValueAtTime(0, end);
-    } else gain.gain.exponentialRampToValueAtTime(0.0001, end);
-    let voices = 0;
-    const trackSource = (
-      source: AudioScheduledSourceNode,
-      cleanup: () => void,
-    ) => {
-      voices++;
-      this.track(source, () => {
-        cleanup();
-        if (--voices === 0) {
-          gain.disconnect();
-          onEnded();
-        }
-      });
-      source.start(at);
-      source.stop(end + 0.01);
-    };
-    if (sound === "air" || sound === "wood") {
-      const buffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.loop = true;
-      const filter = ctx.createBiquadFilter();
-      filter.type = sound === "air" ? "lowpass" : "bandpass";
-      filter.frequency.value = sound === "air" ? 900 : 600;
-      filter.Q.value = sound === "air" ? 0.7 : 9;
-      source.connect(filter);
-      filter.connect(gain);
-      trackSource(source, () => filter.disconnect());
-    } else {
-      const frequencies: Record<
-        Exclude<SynthSoundId, "air" | "wood">,
-        number[]
-      > = {
-        bell: [660, 1320],
-        pulse: [440],
-        bowl: [174, 348, 522],
-        chime: [784, 988, 1175],
-      };
-      frequencies[sound].forEach((frequency, index) => {
-        const osc = ctx.createOscillator();
-        osc.type = sound === "pulse" ? "triangle" : "sine";
-        osc.frequency.value = frequency;
-        const partial = ctx.createGain();
-        partial.gain.value = 1 / (index + 1);
-        osc.connect(partial);
-        partial.connect(gain);
-        trackSource(osc, () => partial.disconnect());
-      });
-    }
   }
 }
