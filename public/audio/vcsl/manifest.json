@@ -1,0 +1,153 @@
+{
+  "library": "Versilian Community Sample Library (VCSL)",
+  "repository": "https://github.com/sgossner/VCSL",
+  "commit": "c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e",
+  "license": "CC0-1.0",
+  "processing": "44.1 kHz stereo, silence trim, max 16s, active RMS normalization with -4 dBFS peak cap, fades, 192 kbps MP3",
+  "samples": [
+    {
+      "id": "nepal-bell",
+      "file": "nepal-bell.mp3",
+      "source": "Idiophones/Struck Idiophones/Hand Bells, Nepalese/HB_2.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Hand%20Bells%2C%20Nepalese/HB_2.wav",
+      "sourceSha256": "e201ef095eac406a1bd5a9ec774229b57f40407d633e6dbeed53c67ebb973d56",
+      "outputSha256": "d65698ce100770d765ad733d89125f44d4d2cdaed6a8717b771c0d754c2d4b96",
+      "duration": 0.9058,
+      "gainDb": 14.57,
+      "trimStartSeconds": 0.0,
+      "bytes": 23239
+    },
+    {
+      "id": "hand-chime",
+      "file": "hand-chime.mp3",
+      "source": "Idiophones/Struck Idiophones/Hand Chimes/sus_C5_r01_main.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Hand%20Chimes/sus_C5_r01_main.wav",
+      "sourceSha256": "836f13d448c9d6d685da634368615c2f7c03b6fb5b99ac93627e1fbb40368e58",
+      "outputSha256": "9cc56d567415b98e62d3c00e8bd3bca8e0b364969679e4cf5e0e32ad45bea2cb",
+      "duration": 6.4211,
+      "gainDb": 4.14,
+      "trimStartSeconds": 0.0,
+      "bytes": 155523
+    },
+    {
+      "id": "glockenspiel",
+      "file": "glockenspiel.mp3",
+      "source": "Idiophones/Struck Idiophones/Glockenspiel/glock_medium_C5_01.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Glockenspiel/glock_medium_C5_01.wav",
+      "sourceSha256": "635f898e0bcb6975b96b18efd9c896f6f1b97ff12174a339ada4814e49675660",
+      "outputSha256": "da10aabdd3bf8cafe9394b973e70065f64bdd13edc678ff47753abf31306630d",
+      "duration": 4.2255,
+      "gainDb": 22.12,
+      "trimStartSeconds": 0.0,
+      "bytes": 102861
+    },
+    {
+      "id": "vibraphone",
+      "file": "vibraphone.mp3",
+      "source": "Idiophones/Struck Idiophones/Vibraphone/Soft Mallets/Vibes_soft_C3_v1_rr2_Main.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Vibraphone/Soft%20Mallets/Vibes_soft_C3_v1_rr2_Main.wav",
+      "sourceSha256": "1dda9a4c3205c365345d66dcb68c8e09c0dca76a310b8fe8108e43c7e8c1cd0a",
+      "outputSha256": "23faa371fc6f2b4b99e65b8dac33dcaef40939d7dc7e0697916be8367cd50aac",
+      "duration": 6.7742,
+      "gainDb": 14.82,
+      "trimStartSeconds": 0.0,
+      "bytes": 164301
+    },
+    {
+      "id": "marimba",
+      "file": "marimba.mp3",
+      "source": "Idiophones/Struck Idiophones/Marimba/Marimba_hit_Outrigger_C4_soft_01.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Marimba/Marimba_hit_Outrigger_C4_soft_01.wav",
+      "sourceSha256": "4d03d005166e8b366e6a983b7a4a89e0847e1d58a6d34dda35ddf74289cace94",
+      "outputSha256": "8fbecff78fe8668da49781418753702d5974b5290e3a0132585b801314cb9c2e",
+      "duration": 1.1138,
+      "gainDb": 32.04,
+      "trimStartSeconds": 0.0015,
+      "bytes": 28255
+    },
+    {
+      "id": "woodblock",
+      "file": "woodblock.mp3",
+      "source": "Idiophones/Struck Idiophones/Woodblock/wood_click_mp.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Woodblock/wood_click_mp.wav",
+      "sourceSha256": "00b76f9fe96c118f29dfc69866c12ec11f2e1264f6cb9c0b36912c2210b015fe",
+      "outputSha256": "9bb3092a7b33abafc76624e0ef80250f3366ce8318b29fd048ed8f64073700cd",
+      "duration": 0.4898,
+      "gainDb": 19.07,
+      "trimStartSeconds": 0.019,
+      "bytes": 13208
+    },
+    {
+      "id": "claves",
+      "file": "claves.mp3",
+      "source": "Idiophones/Struck Idiophones/Claves/Claves1_Hit_v2_rr1_Mid.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Claves/Claves1_Hit_v2_rr1_Mid.wav",
+      "sourceSha256": "bcabe27330761309eb4b4f6207e6e3b4be59815df86449ac05bfb9b81f19efc9",
+      "outputSha256": "f9edae0c510a7c38d93943da109c9f040c15c33c9e33efc8f93b926a7c5ed931",
+      "duration": 0.5881,
+      "gainDb": 20.23,
+      "trimStartSeconds": 0.0032,
+      "bytes": 15716
+    },
+    {
+      "id": "triangle",
+      "file": "triangle.mp3",
+      "source": "Idiophones/Struck Idiophones/Triangles/Triangle1_Hit_v1_rr1_Mid.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Triangles/Triangle1_Hit_v1_rr1_Mid.wav",
+      "sourceSha256": "0397199e59671937bde1e5d29fc2e74946e6c56889cc196e5053f33644f17ff7",
+      "outputSha256": "73adb1fdee5baaa01fbc885d559bf9eaad23bc8eebb4d3976a7ba4560a6bde25",
+      "duration": 1.4715,
+      "gainDb": 35.02,
+      "trimStartSeconds": 0.0036,
+      "bytes": 37032
+    },
+    {
+      "id": "gong",
+      "file": "gong.mp3",
+      "source": "Idiophones/Struck Idiophones/Gong 1/gong_2_mp.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Gong%201/gong_2_mp.wav",
+      "sourceSha256": "8539b652ff19860549b705535ef7535e8255a675abf2f5a2429fc9eea59fb96e",
+      "outputSha256": "94be05a21229679687be23c6841548c53a165cc58e98e04895737cd9b7920f26",
+      "duration": 16.0,
+      "gainDb": 14.99,
+      "trimStartSeconds": 0.0,
+      "bytes": 385610
+    },
+    {
+      "id": "tubular-bell",
+      "file": "tubular-bell.mp3",
+      "source": "Idiophones/Struck Idiophones/Tubular Bells 1/chimes_C4_p_rr1.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Tubular%20Bells%201/chimes_C4_p_rr1.wav",
+      "sourceSha256": "c0f357155823646012c5d86628eedf122f162f813bfeed7337e72bf1a8d37c63",
+      "outputSha256": "472947d21b5f755b0b4ca11b1dc900fa458ee8c9f279a0d69e15e7d4173a7ef4",
+      "duration": 16.0,
+      "gainDb": 10.77,
+      "trimStartSeconds": 0.0,
+      "bytes": 385610
+    },
+    {
+      "id": "shaker",
+      "file": "shaker.mp3",
+      "source": "Idiophones/Struck Idiophones/Shaker, Small/Mid_ShakerDouble_Down_rr1.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Shaker%2C%20Small/Mid_ShakerDouble_Down_rr1.wav",
+      "sourceSha256": "0df7c271e1dba4de7304f7df81886390dd9ae698bfdd6df570026af4f2223574",
+      "outputSha256": "09d00d565e18026aae65c45c4f3da0f8865c7f9838a46cc6fd0bec81cd8d2899",
+      "duration": 0.2653,
+      "gainDb": 25.16,
+      "trimStartSeconds": 0.0,
+      "bytes": 8193
+    },
+    {
+      "id": "bell-tree",
+      "file": "bell-tree.mp3",
+      "source": "Idiophones/Struck Idiophones/Bell Tree/Stroke/BellTree_Stroke_1_Mid.wav",
+      "sourceUrl": "https://raw.githubusercontent.com/sgossner/VCSL/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e/Idiophones/Struck%20Idiophones/Bell%20Tree/Stroke/BellTree_Stroke_1_Mid.wav",
+      "sourceSha256": "aae960ec30aaf8217ca6421d540adefd43012ddb12275be3022818f3a0478cdf",
+      "outputSha256": "6315fa9dd5b41af9e6e55f33cd4ca37f881f906a09c4ed9b7ab953b15bba5df5",
+      "duration": 2.5648,
+      "gainDb": 35.29,
+      "trimStartSeconds": 0.0128,
+      "bytes": 63363
+    }
+  ]
+}
