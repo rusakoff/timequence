@@ -123,12 +123,16 @@ function TimerList({
   timers,
   activeId,
   select,
+  tabs = false,
 }: {
   timers: Timer[];
   activeId?: string;
   select: (id: string) => void;
+  tabs?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState({ start: false, end: false });
   const searchable = timers.length > 8;
   const visibleTimers = searchable
     ? timers.filter((timer) =>
@@ -138,8 +142,36 @@ function TimerList({
   const orderedTimers = [...visibleTimers].sort(
     (a, b) => Number(b.name === DEFAULT_TIMER_NAME) - Number(a.name === DEFAULT_TIMER_NAME),
   );
+  const focusId = orderedTimers.find((timer) => timer.id === activeId)?.id ?? orderedTimers[0]?.id;
+  useEffect(() => {
+    if (tabs) {
+      listRef.current?.querySelector(".current")?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
+  }, [activeId, tabs, query]);
+  useEffect(() => {
+    const list = listRef.current;
+    if (!tabs || !list) return;
+    const updateOverflow = () => {
+      const start = list.scrollLeft > 1;
+      const end = list.scrollWidth - list.clientWidth - list.scrollLeft > 1;
+      setOverflow((previous) => previous.start === start && previous.end === end
+        ? previous : { start, end });
+    };
+    const observer = new ResizeObserver(updateOverflow);
+    observer.observe(list);
+    for (const tab of list.children) observer.observe(tab);
+    list.addEventListener("scroll", updateOverflow, { passive: true });
+    updateOverflow();
+    return () => {
+      observer.disconnect();
+      list.removeEventListener("scroll", updateOverflow);
+    };
+  }, [tabs, timers, query]);
   return (
-    <div className="timer-list" role="navigation" aria-label="Список таймеров">
+    <div className={`timer-picker ${tabs ? "timer-picker-tabs" : ""}`}>
       {searchable && (
         <label className="timer-search">
           <Search size={15} aria-hidden="true" />
@@ -152,26 +184,61 @@ function TimerList({
           />
         </label>
       )}
-      {orderedTimers.map((t) => {
-        const enabledTracks = t.tracks.filter((track) => !track.muted);
-        return (
-          <button
-            className={`timer-card ${t.id === activeId ? "current" : ""}`}
-            key={t.id}
-            aria-current={t.id === activeId ? "page" : undefined}
-            aria-label={`${t.name}, ${time(t.duration)}, ${enabledTracks.length ? `включены дорожки: ${enabledTracks.map((track) => track.name).join(", ")}` : "нет включённых дорожек"}`}
-            onClick={() => select(t.id)}
-          >
-            <span className="timer-card-top">
-              <strong title={t.name}>{t.name}</strong>
-            </span>
-            <TrackIcons tracks={enabledTracks} />
-            <span className="timer-card-duration">{time(t.duration)}</span>
-          </button>
-        );
-      })}
+      <div
+        ref={listRef}
+        className={`timer-list ${tabs ? "timer-tabs" : ""}`}
+        data-overflow-start={tabs && overflow.start ? "true" : undefined}
+        data-overflow-end={tabs && overflow.end ? "true" : undefined}
+        role={tabs ? "tablist" : "navigation"}
+        aria-label="Мои таймеры"
+      >
+        {orderedTimers.map((t, index) => {
+          const enabledTracks = t.tracks.filter((track) => !track.muted);
+          const FirstTrackIcon = t.tracks[0]
+            ? SOUND_ICONS[getSound(t.tracks[0].sound).icon]
+            : TimerIcon;
+          return (
+            <button
+              className={`timer-card ${t.id === activeId ? "current" : ""}`}
+              key={t.id}
+              id={tabs ? `timer-tab-${t.id}` : undefined}
+              role={tabs ? "tab" : undefined}
+              aria-selected={tabs ? t.id === activeId : undefined}
+              aria-controls={tabs ? "timer-editor" : undefined}
+              aria-current={!tabs && t.id === activeId ? "page" : undefined}
+              aria-label={`${t.name}, ${time(t.duration)}, ${enabledTracks.length ? `включены дорожки: ${enabledTracks.map((track) => track.name).join(", ")}` : "нет включённых дорожек"}`}
+              title={t.name}
+              tabIndex={tabs ? (t.id === focusId ? 0 : -1) : undefined}
+              onClick={() => select(t.id)}
+              onKeyDown={(event) => {
+                if (!tabs || event.altKey || event.ctrlKey || event.metaKey) return;
+                const next = event.key === "ArrowRight" ? (index + 1) % orderedTimers.length
+                  : event.key === "ArrowLeft" ? (index - 1 + orderedTimers.length) % orderedTimers.length
+                  : event.key === "Home" ? 0
+                  : event.key === "End" ? orderedTimers.length - 1
+                  : null;
+                if (next === null) return;
+                event.preventDefault();
+                listRef.current?.querySelectorAll<HTMLButtonElement>("[role='tab']")[next]?.focus();
+                select(orderedTimers[next].id);
+              }}
+            >
+              {tabs && <FirstTrackIcon size={16} aria-hidden="true" />}
+              <span className="timer-card-top">
+                <strong title={t.name}>{t.name}</strong>
+              </span>
+              {!tabs && (
+                <>
+                  <TrackIcons tracks={enabledTracks} />
+                  <span className="timer-card-duration">{time(t.duration)}</span>
+                </>
+              )}
+            </button>
+          );
+        })}
+      </div>
       {searchable && visibleTimers.length === 0 && (
-        <p className="timer-list-empty">Таймеры не найдены</p>
+        <p className="timer-list-empty" role="status">Таймеры не найдены</p>
       )}
     </div>
   );
@@ -1258,37 +1325,33 @@ export default function App({ entry }: { entry?: string }) {
           </button>
         </nav>
       </header>
-      <div className="workspace">
-        <aside className="sidebar">
-          <button
-            className="new-timer"
-            onClick={() => {
-              stop();
-              setModal("create");
-            }}
-            disabled={timers.length >= 100}
-          >
-            <Plus size={18} />
-            Новый таймер
-          </button>
-          <div className="sidebar-section-title">
-            <strong>Мои таймеры</strong>
-            <span>{timers.length}</span>
-          </div>
-          <TimerList
-            timers={timers}
-            activeId={timer?.id}
-            select={switchTimer}
-          />
-          <div className="sidebar-bottom">
-            <span>
-              Пробел <kbd>␣</kbd> запуск / пауза
-            </span>
-            <span>
-              Отменить <kbd>⌘ / Ctrl Z</kbd>
-            </span>
-          </div>
-        </aside>
+      <div className="timer-navigation">
+        <TimerList
+          timers={timers}
+          activeId={timer?.id}
+          select={switchTimer}
+          tabs
+        />
+        <button
+          className="new-timer"
+          aria-label="Новый таймер"
+          title={timers.length >= 100 ? "Можно создать до 100 таймеров" : "Новый таймер"}
+          onClick={() => {
+            stop();
+            setModal("create");
+          }}
+          disabled={timers.length >= 100}
+        >
+          <Plus size={18} />
+          <span>Новый таймер</span>
+        </button>
+      </div>
+      <div
+        className="workspace"
+        id="timer-editor"
+        role={timer ? "tabpanel" : undefined}
+        aria-label={timer?.name}
+      >
         <main>
           {storageMessage && (
             <div className="storage-error" role="alert">
