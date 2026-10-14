@@ -552,7 +552,7 @@ export default function App({ entry }: { entry?: string }) {
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [position, setPosition] = useState(0);
-  const [eventGuideEnabled, setEventGuideEnabled] = useState(false);
+  const [eventGuideEnabled, setEventGuideEnabled] = useState(true);
   const [volume, setVolume] = useState(65);
   const [mobileGrid, setMobileGrid] = useState(() =>
     window.matchMedia("(max-width: 700px)").matches,
@@ -1906,7 +1906,7 @@ export default function App({ entry }: { entry?: string }) {
                     </div>
                   </div>
                   {timer.tracks.length > 0 && (
-                    eventGuideEnabled && nextEventAt !== null && nextEventRemaining !== null && (
+                    eventGuideEnabled && playing && nextEventAt !== null && nextEventRemaining !== null && (
                       <div
                         className="event-guide-area"
                         aria-hidden="true"
