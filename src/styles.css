@@ -1043,11 +1043,6 @@ h1 {
   width: 2px;
   border-radius: 999px;
   background: #fa4936;
-  box-shadow:
-    inset 1px 0 0 #ffffff55,
-    1px 0 1px #77251d55,
-    3px 1px 4px #321b173d,
-    5px 1px 8px #321b1726;
 }
 .sequencer-footer {
   flex-shrink: 0;
