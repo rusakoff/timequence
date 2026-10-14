@@ -142,24 +142,27 @@ function TimerList({
           />
         </label>
       )}
-      {visibleTimers.map((t) => (
-        <button
-          className={`timer-card ${t.id === activeId ? "current" : ""}`}
-          key={t.id}
-          aria-current={t.id === activeId ? "page" : undefined}
-          aria-label={`${t.name}, ${time(t.duration)}, ${t.tracks.length ? `дорожки: ${t.tracks.map((track) => track.name).join(", ")}` : "без дорожек"}`}
-          onClick={() => select(t.id)}
-        >
-          <span className="timer-card-top">
-            <strong title={t.name}>{t.name}</strong>
-          </span>
-          <TrackIcons timer={t} />
-          <span className="timer-card-duration">
-            <TimerIcon size={12} aria-hidden="true" />
-            {time(t.duration)}
-          </span>
-        </button>
-      ))}
+      {visibleTimers.map((t) => {
+        const enabledTracks = t.tracks.filter((track) => !track.muted);
+        return (
+          <button
+            className={`timer-card ${t.id === activeId ? "current" : ""}`}
+            key={t.id}
+            aria-current={t.id === activeId ? "page" : undefined}
+            aria-label={`${t.name}, ${time(t.duration)}, ${enabledTracks.length ? `включены дорожки: ${enabledTracks.map((track) => track.name).join(", ")}` : "нет включённых дорожек"}`}
+            onClick={() => select(t.id)}
+          >
+            <span className="timer-card-top">
+              <strong title={t.name}>{t.name}</strong>
+            </span>
+            <TrackIcons tracks={enabledTracks} />
+            <span className="timer-card-duration">
+              <TimerIcon size={12} aria-hidden="true" />
+              {time(t.duration)}
+            </span>
+          </button>
+        );
+      })}
       {searchable && visibleTimers.length === 0 && (
         <p className="timer-list-empty">Таймеры не найдены</p>
       )}
@@ -219,23 +222,23 @@ function TrackNameField({
   );
 }
 
-function TrackIcons({ timer }: { timer: Timer }) {
-  const shown = timer.tracks.length <= 5 ? timer.tracks : timer.tracks.slice(0, 4);
+function TrackIcons({ tracks }: { tracks: Track[] }) {
+  const shown = tracks.length <= 5 ? tracks : tracks.slice(0, 4);
   return (
     <span className="timer-track-icons" aria-hidden="true">
       {shown.map((track) => {
         const Icon = SOUND_ICONS[getSound(track.sound).icon];
         return (
           <span key={track.id} className={`timer-track-icon color-${track.color}`} title={track.name}>
-            <Icon size={17} strokeWidth={1.8} />
+            <Icon size={9} strokeWidth={2} />
           </span>
         );
       })}
-      {timer.tracks.length > 5 && (
-        <span className="timer-track-more">+{timer.tracks.length - shown.length}</span>
+      {tracks.length > 5 && (
+        <span className="timer-track-more">+{tracks.length - shown.length}</span>
       )}
-      {timer.tracks.length === 0 && (
-        <span className="timer-track-empty">Нет дорожек</span>
+      {tracks.length === 0 && (
+        <span className="timer-track-empty">Все дорожки выключены</span>
       )}
     </span>
   );

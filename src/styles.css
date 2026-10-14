@@ -487,8 +487,8 @@ input[type="range"]:disabled {
 .timer-track-icons {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 30px;
+  gap: 4px;
+  height: 16px;
   margin-top: 2px;
 }
 .timer-track-icon,
@@ -496,9 +496,9 @@ input[type="range"]:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   border-radius: 50%;
 }
 .timer-track-icon {
@@ -508,7 +508,7 @@ input[type="range"]:disabled {
 .timer-track-more {
   border: 1px solid var(--line);
   color: var(--muted);
-  font-size: 10px;
+  font-size: 8px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
