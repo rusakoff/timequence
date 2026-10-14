@@ -13,7 +13,7 @@ npm run dev -- --port 5173
 
 `npm run build:pages` собирает сайт для адреса `https://rusakoff.github.io/timequence/` с нужным префиксом для скриптов, значка и аудиофайлов. Обычная команда `npm run build` остаётся для публикации в корне домена, в том числе на Netlify.
 
-Для публикации откройте в репозитории **Settings → Pages**, выберите **GitHub Actions** как источник, затем запустите вручную workflow **Deploy to GitHub Pages** во вкладке **Actions**. Workflow не запускается на каждый push, пока Pages не включён. Репозиторий сейчас приватный: для GitHub Pages в приватном репозитории GitHub требует подходящий платный тариф; с GitHub Free репозиторий должен быть публичным. Сам сайт Pages обычно доступен всем даже при приватном репозитории. См. [документацию GitHub](https://docs.github.com/en/pages/quickstart) и [рекомендации Vite](https://vite.dev/guide/static-deploy.html#github-pages).
+GitHub Pages публикует сайт по адресу [rusakoff.github.io/timequence](https://rusakoff.github.io/timequence/) через workflow **Deploy to GitHub Pages**. Он запускается при каждом push в `main`; его также можно запустить вручную во вкладке **Actions**. Источник публикации в **Settings → Pages** — **GitHub Actions**. См. [документацию GitHub](https://docs.github.com/en/pages/quickstart) и [рекомендации Vite](https://vite.dev/guide/static-deploy.html#github-pages).
 
 ## Управление
 
