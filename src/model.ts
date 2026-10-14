@@ -1,4 +1,4 @@
-import { sounds, type SoundId } from "./sounds.ts";
+import { sounds, DEFAULT_SOUND, TICK_SOUND, restoreSoundId, type SoundId } from "./sounds.ts";
 export { sounds, type SoundId } from "./sounds.ts";
 export interface SoundEvent {
   id: string;
@@ -177,7 +177,7 @@ export const makeTrack = (sound: SoundId): Track => {
 
 export function makeTickTrack(every: 1): Track {
   return {
-    ...makeTrack("tick"),
+    ...makeTrack(TICK_SOUND),
     name: "Тик · 1 с",
     color: "ink",
     volume: 28,
@@ -205,7 +205,7 @@ export const makeTimer = (name = "Новый таймер"): Timer => ({
   duration: 300,
   step: DEFAULT_STEP,
   loop: false,
-  tracks: [makeTrack("nepal-bell"), makeTickTrack(1)],
+  tracks: [makeTrack(DEFAULT_SOUND), makeTickTrack(1)],
 });
 export function validTimers(value: unknown): value is Timer[] {
   if (!Array.isArray(value) || value.length > 100) return false;
@@ -245,7 +245,7 @@ export function validTimers(value: unknown): value is Timer[] {
           (tr.tickEvery === undefined ||
             ([1, 5].includes(tr.tickEvery) &&
               tr.events.length === 0 &&
-              tr.sound === (tr.tickEvery === 1 ? "tick" : "tick-accent"))) &&
+              tr.sound === (tr.tickEvery === 1 ? TICK_SOUND : "snap"))) &&
           tr.events.every(
             (e) =>
               e &&
@@ -260,7 +260,7 @@ export function validTimers(value: unknown): value is Timer[] {
   );
 }
 
-/** Keep cue positions and IDs when migrating the former variable-length blocks. */
+/** Preserve user edits while migrating old sounds and variable-length blocks. */
 export function restoreTimers(value: unknown): Timer[] | null {
   if (validTimers(value)) return value;
   if (!Array.isArray(value)) return null;
@@ -280,11 +280,12 @@ export function restoreTimers(value: unknown): Timer[] | null {
         if (
           !track ||
           !Array.isArray(track.events) ||
-          !sounds.some((s) => s.id === track.sound)
+          !restoreSoundId(track.sound)
         )
           return track;
         return {
           ...track,
+          sound: restoreSoundId(track.sound)!,
           events: track.events.map(
             (event: SoundEvent & { mode?: string; duration?: number }) => {
               if (!event || typeof event !== "object") return event;

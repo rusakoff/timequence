@@ -1,3 +1,4 @@
+import { legacySounds } from "./sounds.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { initialTimers, breathingTimer } from "./examples.ts";
@@ -122,7 +123,7 @@ test("drag and keyboard moves snap to a step and stay inside the last cell", () 
   assert.equal(moveEvent(e, -10, 60, 5).at, 0);
 });
 
-test("all bundled recordings and existing synth timers survive storage restoration", () => {
+test("all Glass cues survive storage restoration", () => {
   const timer = makeTimer();
   for (const sound of sounds) {
     timer.tracks = [makeTrack(sound.id)];
@@ -131,7 +132,7 @@ test("all bundled recordings and existing synth timers survive storage restorati
       timer,
     ]);
   }
-  assert.equal(sounds.filter((sound) => sound.kind === "sample").length, 12);
+  assert.equal(sounds.length, 78);
 });
 
 test("all cues have only a start and identifier, independent of the chosen sound", () => {
@@ -213,4 +214,21 @@ test("breathing example marks four 4/7/8-second cycles with independent colored 
 
 test("every bundled sound is at most three seconds", () => {
   assert.ok(sounds.every((sound) => sound.duration > 0 && sound.duration <= 3));
+});
+
+
+test("every legacy sound migrates to Glass without changing user tracks or events", () => {
+  for (const [oldSound, [sound]] of Object.entries(legacySounds)) {
+    const timer = makeTimer("Личный");
+    const track = { ...timer.tracks[0], sound: oldSound, name: "Мой сигнал", color: "blue", volume: 23, muted: true,
+      events: [{ id: "keep", at: 42 }] };
+    const old = [{ ...timer, tracks: [track] }];
+    const migrated = restoreTimers(old)!;
+    assert.ok(validTimers(migrated));
+    assert.deepEqual(migrated, [{ ...timer, tracks: [{ ...track, sound }] }]);
+    assert.equal(old[0].tracks[0].sound, oldSound);
+    assert.deepEqual(restoreTimers(migrated), migrated);
+  }
+  for (const sound of ["unknown", "toString", "__proto__"])
+    assert.equal(restoreTimers([{ ...makeTimer(), tracks: [{ ...makeTrack("press"), sound }] }]), null);
 });

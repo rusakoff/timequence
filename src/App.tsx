@@ -41,13 +41,13 @@ import {
   Wind,
   X,
 } from "lucide-react";
-import { AudioEngine, SampleLoadError } from "./audio";
+import { AudioEngine, SoundLoadError } from "./audio";
 import { SettingsPopover } from "./SettingsPopover";
 import { ZenMode } from "./ZenMode";
 import { Home } from "./Home";
 import { initialTimers } from "./examples";
 import { loadTimers, serializeTimers, STORAGE } from "./storage";
-import { getSound, MAX_SOUND_DURATION } from "./sounds";
+import { getSound, DEFAULT_SOUND, MAX_SOUND_DURATION } from "./sounds";
 import {
   clamp,
   CELL_PITCH,
@@ -460,8 +460,11 @@ export default function App({ entry }: { entry?: string }) {
   const [mobileStepValue, setMobileStepValue] = useState(1);
   const [mobileMixerOpen, setMobileMixerOpen] = useState(false);
   const [pendingStep, setPendingStep] = useState<{ timerId: string; step: number } | null>(null);
-  const [soundChoice, setSoundChoice] = useState<SoundId>("nepal-bell");
-  const [soundGroup, setSoundGroup] = useState<"sample" | "synth">("sample");
+  const [soundChoice, setSoundChoice] = useState<SoundId>(DEFAULT_SOUND);
+  const [soundSearch, setSoundSearch] = useState("");
+  const filteredSounds = sounds.filter((sound) =>
+    `${sound.name} ${sound.id} ${sound.detail}`.toLocaleLowerCase("ru").includes(soundSearch.trim().toLocaleLowerCase("ru")),
+  );
   const [previewState, setPreviewState] = useState<{
     sound: SoundId;
     status: "loading" | "playing";
@@ -792,7 +795,7 @@ export default function App({ entry }: { entry?: string }) {
     } catch (error) {
       if (token === transportToken.current) {
         const message =
-          error instanceof SampleLoadError
+          error instanceof SoundLoadError
             ? error.message
             : "Не удалось включить звук. Проверьте разрешения браузера и попробуйте снова.";
         setTransportError(message);
@@ -837,7 +840,7 @@ export default function App({ entry }: { entry?: string }) {
     } catch (error) {
       if (token !== previewToken.current) return;
       const message =
-        error instanceof SampleLoadError
+        error instanceof SoundLoadError
           ? error.message
           : "Не удалось включить звук. Попробуйте ещё раз.";
       setPreviewState(null);
@@ -1763,8 +1766,8 @@ export default function App({ entry }: { entry?: string }) {
                     onClick={() => {
                       setSoundAction("add");
                       stopPreview();
-                      setSoundChoice("nepal-bell");
-                      setSoundGroup("sample");
+                      setSoundChoice(DEFAULT_SOUND);
+                      setSoundSearch("");
                       setModal("sounds");
                     }}
                   >
@@ -1854,7 +1857,7 @@ export default function App({ entry }: { entry?: string }) {
                               setSoundAction("replace");
                               setSoundChoice(selectedTrack.sound);
                               stopPreview();
-                              setSoundGroup(getSound(selectedTrack.sound).kind);
+                              setSoundSearch("");
                               setModal("sounds");
                             }}
                           >
@@ -2474,75 +2477,61 @@ export default function App({ entry }: { entry?: string }) {
           className="sounds-dialog"
           close={closeModal}
         >
-          <h2>Выбрать звук</h2>
-          <div className="segmented sound-tabs" aria-label="Тип звуков">
-            <button
-              className={soundGroup === "sample" ? "active" : ""}
-              aria-pressed={soundGroup === "sample"}
-              onClick={() => {
-                stopPreview();
-                setSoundGroup("sample");
-              }}
-            >
-              Инструменты <span>12</span>
-            </button>
-            <button
-              className={soundGroup === "synth" ? "active" : ""}
-              aria-pressed={soundGroup === "synth"}
-              onClick={() => {
-                stopPreview();
-                setSoundGroup("synth");
-              }}
-            >
-              Синтезатор{" "}
-              <span>{sounds.filter((s) => s.kind === "synth").length}</span>
-            </button>
-          </div>
+          <h2>Glass <span className="count">{sounds.length}</span></h2>
+          <input
+            className="sound-search"
+            type="search"
+            aria-label="Поиск звука"
+            placeholder="Найти звук по названию"
+            value={soundSearch}
+            onChange={(event) => setSoundSearch(event.target.value)}
+          />
           <div className="sound-library">
-            {sounds
-              .filter((sound) => sound.kind === soundGroup)
-              .map((s) => {
-                const Icon = SOUND_ICONS[s.icon];
-                const previewing = previewState?.sound === s.id;
-                const loading = previewing && previewState.status === "loading";
-                return (
-                  <div
-                    className={`sound-option ${soundChoice === s.id ? "chosen" : ""}`}
-                    key={s.id}
+            {filteredSounds.length === 0 && (
+              <p className="muted sound-empty" role="status">Ничего не найдено. Попробуйте другое название.</p>
+            )}
+            {filteredSounds.map((s) => {
+              const Icon = SOUND_ICONS[s.icon];
+              const previewing = previewState?.sound === s.id;
+              const loading = previewing && previewState.status === "loading";
+              return (
+                <div
+                  className={`sound-option ${soundChoice === s.id ? "chosen" : ""}`}
+                  key={s.id}
+                >
+                  <button
+                    className="sound-option-select"
+                    aria-pressed={soundChoice === s.id}
+                    onClick={() => {
+                      setSoundChoice(s.id);
+                      void preview(s.id);
+                    }}
                   >
-                    <button
-                      className="sound-option-select"
-                      aria-pressed={soundChoice === s.id}
-                      onClick={() => {
-                        setSoundChoice(s.id);
-                        void preview(s.id);
-                      }}
-                    >
-                      <span className={`sound-icon color-${s.color}`}>
-                        <Icon size={22} />
-                      </span>
-                      <span>
-                        <strong>{s.name}</strong>
-                        <small>{s.detail}</small>
-                      </span>
-                      {soundChoice === s.id && <Check size={17} />}
-                    </button>
-                    <button
-                      className={`icon-btn ${previewing ? "is-previewing" : ""}`}
-                      aria-label={`${loading ? "Отменить загрузку" : previewing ? "Остановить" : "Послушать"}: ${s.name}`}
-                      onClick={() => preview(s.id)}
-                    >
-                      {loading ? (
-                        <LoaderCircle className="spinning" size={16} />
-                      ) : previewing ? (
-                        <Square size={13} fill="currentColor" />
-                      ) : (
-                        <Play size={16} />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+                    <span className={`sound-icon color-${s.color}`}>
+                      <Icon size={22} />
+                    </span>
+                    <span>
+                      <strong>{s.name}</strong>
+                      <small>{s.detail}</small>
+                    </span>
+                    {soundChoice === s.id && <Check size={17} />}
+                  </button>
+                  <button
+                    className={`icon-btn ${previewing ? "is-previewing" : ""}`}
+                    aria-label={`${loading ? "Отменить подготовку" : previewing ? "Остановить" : "Послушать"}: ${s.name}`}
+                    onClick={() => preview(s.id)}
+                  >
+                    {loading ? (
+                      <LoaderCircle className="spinning" size={16} />
+                    ) : previewing ? (
+                      <Square size={13} fill="currentColor" />
+                    ) : (
+                      <Play size={16} />
+                    )}
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <div className="library-footer">
             {previewError && (
@@ -2552,7 +2541,7 @@ export default function App({ entry }: { entry?: string }) {
             )}
             <p className="sample-status" role="status">
               {previewState
-                ? `${previewState.status === "loading" ? "Загрузка" : "Играет"}: ${getSound(previewState.sound).name}`
+                ? `${previewState.status === "loading" ? "Подготовка" : "Играет"}: ${getSound(previewState.sound).name}`
                 : `Выбрано: ${getSound(soundChoice).name}`}
             </p>
             <button
@@ -2580,17 +2569,17 @@ export default function App({ entry }: { entry?: string }) {
               <Plus size={17} />
             </button>
             <p className="sample-credit">
-              Записи инструментов:{" "}
+              Звуки:{" "}
               <a
-                href="https://github.com/sgossner/VCSL"
+                href="https://uisfx.com"
                 target="_blank"
                 rel="noreferrer"
               >
-                VCSL
+                UI SFX · Glass
               </a>{" "}
               ·{" "}
               <a
-                href={`${import.meta.env.BASE_URL}audio/vcsl/LICENSE.txt`}
+                href="https://github.com/romainsimon/uisfx/blob/main/packages/uisfx/LICENSE-AUDIO"
                 target="_blank"
                 rel="noreferrer"
               >

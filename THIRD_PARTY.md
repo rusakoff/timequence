@@ -1,23 +1,13 @@
-# Записи инструментов
+# Звуки UI SFX — Glass
 
-Timequence включает 12 обработанных записей из **Versilian Community Sample Library (VCSL)**, Samuel Gossner / Versilian Studios и участники проекта.
+Timequence использует только набор **Glass** из npm-пакета [uisfx](https://www.npmjs.com/package/uisfx), версия 0.4.0 (автор Yuki Capital).
 
-- Репозиторий: https://github.com/sgossner/VCSL
-- Версия источников: `c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e`
-- Лицензия записей: **CC0 1.0 Universal**; полный текст — [public/audio/vcsl/LICENSE.txt](./public/audio/vcsl/LICENSE.txt).
-- Точные исходные пути, URL, контрольные суммы оригиналов и обработанных MP3, параметры обработки — [manifest.json](./public/audio/vcsl/manifest.json).
-
-Подборка: непальский колокольчик, ручной колокол, глокеншпиль, вибрафон, маримба, вудблок, клавес, треугольник, гонг, трубчатый колокол, шейкер, перелив колокольчиков.
-
-Обработка: удаление начальной тишины с запасом 5 мс перед атакой, ограничение длительности до 3 секунд, нормализация по самому громкому окну 400 мс до −21 dBFS RMS с ограничением пиков до −4 dBFS, короткий вход и плавный выход, MP3 192 кбит/с, стерео 44,1 кГц. Острые ударные остаются тише по RMS, если выравнивание привело бы к превышению пиков. Высота и скорость записей не изменены.
-
-Повторная подготовка (Python 3 и FFmpeg с libmp3lame):
-
-```sh
-python3 scripts/prepare-samples.py
-```
-
-Скрипт скачивает только выбранные записи из закреплённой версии, создаёт MP3, манифест и данные для формы волны. Контрольные суммы выходных файлов могут отличаться между версиями FFmpeg. Обычная сборка приложения не требует Python, FFmpeg или доступа к GitHub.
+- Репозиторий: [romainsimon/uisfx](https://github.com/romainsimon/uisfx).
+- Код библиотеки: [MIT](https://github.com/romainsimon/uisfx/blob/main/packages/uisfx/LICENSE).
+- Сгенерированные звуки: [CC0 1.0 Universal](https://github.com/romainsimon/uisfx/blob/main/packages/uisfx/LICENSE-AUDIO).
+- Все 78 сигналов синтезируются локально из рецептов Glass. Аудиофайлы других наборов не копируются в приложение.
+- Шесть звуков состояния воспроизводятся как один цикл, без зацикливания события. Секундный тик использует Glass `typing`.
+- `npm run sounds:metadata` обновляет `src/glass-durations.ts` из фактического рендера библиотеки. Для работы и сборки не нужны Python, FFmpeg или внешние аудиосервисы.
 
 ## Шрифт Manrope
 

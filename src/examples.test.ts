@@ -133,7 +133,7 @@ test("upgrade respects capacity and does not duplicate the new examples", () => 
   assert.deepEqual(upgradeDefaultTimers(current), current);
 });
 
-test("v10 preserves edits, empty libraries and deliberate deletion of examples", () => {
+test("v11 preserves edits, empty libraries and deliberate deletion of examples", () => {
   for (const timers of [[], initialTimers().slice(1), [makeTimer("Свой")]]) {
     const storage = new Map([
       [STORAGE, serializeTimers(timers)],
@@ -260,4 +260,26 @@ test("new sequences use whole steps and distinct actions, with usable segment bo
       .name,
     "Посмотрите",
   );
+});
+
+
+test("v10 upgrades to Glass in v11 without restoring deleted tracks or examples", () => {
+  const timer = makeTimer("Мой таймер");
+  const action = { ...timer.tracks[0], sound: "nepal-bell", name: "Мой звон", events: [{ id: "keep", at: 12 }] };
+  const tick = { ...timer.tracks[1], sound: "tick", volume: 17, muted: true };
+  const old = JSON.stringify({ version: 10, timers: [{ ...timer, tracks: [action, tick] }] });
+  const storage = new Map([["timequence.timers.v10", old]]);
+  const migrated = loadTimers((key) => storage.get(key) ?? null);
+  assert.deepEqual(migrated, [{ ...timer, tracks: [
+    { ...action, sound: "notification" }, { ...tick, sound: "typing" },
+  ] }]);
+  assert.equal(STORAGE, "timequence.timers.v11");
+  storage.set(STORAGE, serializeTimers(migrated));
+  assert.deepEqual(loadTimers((key) => storage.get(key) ?? null), migrated);
+  assert.equal(storage.get("timequence.timers.v10"), old);
+  storage.set("timequence.timers.v10", JSON.stringify({ version: 10, timers: [{ ...timer, tracks: [action] }] }));
+  storage.delete(STORAGE);
+  assert.equal(loadTimers((key) => storage.get(key) ?? null)[0].tracks.length, 1);
+  storage.set("timequence.timers.v10", JSON.stringify({ version: 10, timers: [] }));
+  assert.deepEqual(loadTimers((key) => storage.get(key) ?? null), []);
 });

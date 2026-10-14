@@ -1,3 +1,4 @@
+import { legacySounds } from "./sounds.ts";
 import {
   makeEvent,
   makeTimer,
@@ -39,9 +40,9 @@ export function breathingTimer(): Timer {
     {
       repeat: 4,
       phases: [
-        ["Вдох", 4, "nepal-bell", "sage"],
-        ["Задержка", 7, "woodblock", "sand"],
-        ["Выдох", 8, "glockenspiel", "blue"],
+        ["Вдох", 4, "notification", "sage"],
+        ["Задержка", 7, "press", "sand"],
+        ["Выдох", 8, "success", "blue"],
       ],
     },
   ]);
@@ -53,39 +54,39 @@ export function initialTimers(): Timer[] {
       {
         repeat: 6,
         phases: [
-          ["Упражнение", 60, "claves", "orange"],
-          ["Отдых", 30, "nepal-bell", "sage"],
+          ["Упражнение", 60, "snap", "orange"],
+          ["Отдых", 30, "notification", "sage"],
         ],
       },
     ]),
     breathingTimer(),
     sequence("Глаза · влево / вправо", [
-      { phases: [["Закройте глаза", 3, "triangle", "sand"]] },
+      { phases: [["Закройте глаза", 3, "checkpoint", "sand"]] },
       {
         repeat: 3,
         phases: [
-          ["Медленно влево", 3, "woodblock", "sage"],
-          ["Медленно вправо", 3, "glockenspiel", "blue"],
+          ["Медленно влево", 3, "press", "sage"],
+          ["Медленно вправо", 3, "success", "blue"],
         ],
       },
-      { phases: [["Откройте глаза", 3, "nepal-bell", "clay"]] },
+      { phases: [["Откройте глаза", 3, "notification", "clay"]] },
     ]),
     sequence("Табата · 20 / 10", [
       {
         repeat: 8,
         phases: [
-          ["Упражнение", 20, "claves", "orange"],
-          ["Отдых", 10, "triangle", "blue"],
+          ["Упражнение", 20, "snap", "orange"],
+          ["Отдых", 10, "checkpoint", "blue"],
         ],
       },
     ]),
     sequence("Чистка зубов", [
       {
         phases: [
-          ["Сверху слева", 30, "woodblock", "sage"],
-          ["Сверху справа", 30, "marimba", "blue"],
-          ["Снизу справа", 30, "nepal-bell", "sand"],
-          ["Снизу слева", 30, "triangle", "clay"],
+          ["Сверху слева", 30, "press", "sage"],
+          ["Сверху справа", 30, "select", "blue"],
+          ["Снизу справа", 30, "notification", "sand"],
+          ["Снизу слева", 30, "checkpoint", "clay"],
         ],
       },
     ]),
@@ -99,12 +100,12 @@ export function additionalTimers(): Timer[] {
       {
         repeat: 3,
         phases: [
-          ["Приседания", 30, "claves", "orange"],
-          ["Отдых", 15, "nepal-bell", "sage"],
-          ["Отжимания", 30, "woodblock", "sand"],
-          ["Отдых", 15, "nepal-bell", "sage"],
-          ["Планка", 30, "marimba", "blue"],
-          ["Отдых", 15, "nepal-bell", "sage"],
+          ["Приседания", 30, "snap", "orange"],
+          ["Отдых", 15, "notification", "sage"],
+          ["Отжимания", 30, "press", "sand"],
+          ["Отдых", 15, "notification", "sage"],
+          ["Планка", 30, "select", "blue"],
+          ["Отдых", 15, "notification", "sage"],
         ],
       },
     ]),
@@ -112,10 +113,10 @@ export function additionalTimers(): Timer[] {
       {
         repeat: 2,
         phases: [
-          ["Левая сторона", 30, "nepal-bell", "sage"],
-          ["Смените положение", 5, "woodblock", "sand"],
-          ["Правая сторона", 30, "glockenspiel", "blue"],
-          ["Отдых", 10, "triangle", "clay"],
+          ["Левая сторона", 30, "notification", "sage"],
+          ["Смените положение", 5, "press", "sand"],
+          ["Правая сторона", 30, "success", "blue"],
+          ["Отдых", 10, "checkpoint", "clay"],
         ],
       },
     ]),
@@ -123,10 +124,10 @@ export function additionalTimers(): Timer[] {
       {
         repeat: 10,
         phases: [
-          ["Посмотрите", 10, "woodblock", "sage"],
-          ["Вспомните", 20, "nepal-bell", "blue"],
-          ["Проверьте", 5, "marimba", "sand"],
-          ["Следующая карточка", 5, "triangle", "orange"],
+          ["Посмотрите", 10, "press", "sage"],
+          ["Вспомните", 20, "notification", "blue"],
+          ["Проверьте", 5, "select", "sand"],
+          ["Следующая карточка", 5, "checkpoint", "orange"],
         ],
       },
     ]),
@@ -142,15 +143,21 @@ export function addNewExamples(saved: Timer[]): Timer[] {
   return [...saved, ...additions.slice(0, Math.max(0, 100 - saved.length))];
 }
 
-/** Known, untouched old demos, after event-format migration. */
+/** Match old names and colors after their sound IDs have migrated to Glass. */
+function makeLegacyTrack(id: keyof typeof legacySounds): Track {
+  const [sound, name, color] = legacySounds[id];
+  return { ...makeTrack(sound), name, color };
+}
+
+/** Known, untouched old demos, after event-format and sound migration. */
 export function legacyExampleTimers(): Timer[] {
   const examples: Timer[] = [];
   for (const sample of [true, false]) {
-    const sounds: SoundId[] = sample
+    const sounds: (keyof typeof legacySounds)[] = sample
       ? ["nepal-bell", "woodblock", "vibraphone", "bell-tree"]
       : ["bell", "pulse", "bowl", "chime"];
     const rhythm = makeTimer("Мой ритм");
-    rhythm.tracks = sounds.map(makeTrack);
+    rhythm.tracks = sounds.map(makeLegacyTrack);
     [
       [0, 60, 120, 180, 240],
       [30, 90, 150, 210, 270],
@@ -161,7 +168,7 @@ export function legacyExampleTimers(): Timer[] {
         (rhythm.tracks[index].events = positions.map(makeEvent)),
     );
     const intervals = { ...makeTimer("Короткие интервалы"), duration: 180 };
-    intervals.tracks = [makeTrack(sounds[0])];
+    intervals.tracks = [makeLegacyTrack(sounds[0])];
     intervals.tracks[0].events = Array.from({ length: 18 }, (_, i) =>
       makeEvent(i * 10),
     );
@@ -172,7 +179,7 @@ export function legacyExampleTimers(): Timer[] {
     };
     quiet.tracks = (
       sample ? (["gong", "hand-chime"] as const) : (["bowl", "air"] as const)
-    ).map(makeTrack);
+    ).map(makeLegacyTrack);
     quiet.tracks.forEach(
       (track, i) =>
         (track.events = Array.from({ length: 5 }, (_, n) =>
@@ -186,9 +193,9 @@ export function legacyExampleTimers(): Timer[] {
       {
         repeat: 10,
         phases: [
-          ["Вдох", 3, "nepal-bell", "sage"],
-          ["Задержка", 4, "woodblock", "sand"],
-          ["Выдох", 5, "glockenspiel", "blue"],
+          ["Вдох", 3, "notification", "sage"],
+          ["Задержка", 4, "press", "sand"],
+          ["Выдох", 5, "success", "blue"],
         ],
       },
     ]),

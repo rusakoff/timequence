@@ -25,8 +25,8 @@ test("zen follows 4–7–8 intervals and switches precisely on the next cue", (
 test("simultaneous cues remain grouped, including muted and zero-volume tracks", () => {
   const timer = makeTimer();
   timer.tracks = [
-    { ...makeTrack("bell"), muted: true, events: [makeEvent(3), makeEvent(0)] },
-    { ...makeTrack("pulse"), volume: 0, events: [makeEvent(0)] },
+    { ...makeTrack("notification"), muted: true, events: [makeEvent(3), makeEvent(0)] },
+    { ...makeTrack("start"), volume: 0, events: [makeEvent(0)] },
   ];
   const moments = cueMoments(timer);
   assert.deepEqual(

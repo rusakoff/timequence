@@ -1,6 +1,8 @@
 import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { AudioEngine, SampleLoadError } from "./audio.ts";
+import { AudioEngine, SoundLoadError } from "./audio.ts";
+import { createRecipe, renderRecipe } from "uisfx";
+import { getSound, sounds } from "./sounds.ts";
 import { makeTimer, makeTrack, makeTickTrack, type SoundId } from "./model.ts";
 
 class Param {
@@ -68,13 +70,16 @@ class Source extends Node {
   }
 }
 class Context {
+  static resumeGate: Promise<void> | null = null;
+  static rate = 8000;
   currentTime = 0;
-  state = "running";
-  sampleRate = 100;
+  state = Context.resumeGate ? "suspended" : "running";
+  sampleRate = Context.rate;
   destination = new Node();
   buffers: Source[] = [];
   oscillators: Source[] = [];
   async resume() {
+    await Context.resumeGate;
     this.state = "running";
   }
   createGain() {
@@ -99,17 +104,11 @@ class Context {
     this.oscillators.push(source);
     return source;
   }
-  async decodeAudioData(data: ArrayBuffer) {
-    return new Buffer(2, new Uint8Array(data)[0] * 10, 100);
-  }
 }
-const response = (duration = 3) =>
-  new Response(new Uint8Array([duration * 10]));
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
-  });
+  const promise = new Promise<T>((r) => { resolve = r; });
   return { promise, resolve };
 }
 function timerWith(sound: SoundId, length = 10) {
@@ -119,198 +118,171 @@ function timerWith(sound: SoundId, length = 10) {
   timer.tracks[0].events = [{ id: "event", at: 0 }];
   return timer;
 }
-class OfflineContext extends Context {
-  result: Buffer;
-  constructor(channels: number, length: number, rate: number) {
-    super();
-    this.sampleRate = rate;
-    this.result = new Buffer(channels, length, rate);
-  }
-  async startRendering() {
-    return this.result;
-  }
-}
 const context = (engine: AudioEngine) => engine.context as unknown as Context;
-const tick = () => new Promise((resolve) => setImmediate(resolve));
+const near = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 0.0002, `${actual} != ${expected}`);
 beforeEach(() => {
+  Context.resumeGate = null;
+  Context.rate = 8000;
   globalThis.AudioContext = Context as unknown as typeof AudioContext;
-  globalThis.OfflineAudioContext =
-    OfflineContext as unknown as typeof OfflineAudioContext;
-  globalThis.fetch = async () => response();
+  globalThis.fetch = async () => { throw new Error("Glass must not fetch audio files"); };
 });
 
-test("timer clock starts only after recordings finish loading", async () => {
-  const pending = deferred<Response>();
-  globalThis.fetch = () => pending.promise;
+test("preview and transport use the actual Glass renderer and share cached buffers", async () => {
+  const preview = new AudioEngine();
+  const timer = new AudioEngine();
+  await Promise.all([preview.preview("notification", 70, 0), timer.start(timerWith("notification"), 0, 0)]);
+  const buffer = context(preview).buffers[0].buffer!;
+  const expected = renderRecipe(createRecipe("glass", "notification"), Context.rate);
+  assert.deepEqual(buffer.getChannelData(0), expected.left);
+  assert.deepEqual(buffer.getChannelData(1), expected.right);
+  assert.equal(context(timer).buffers[0].buffer, buffer);
+  assert.equal(preview.master!.gain.value, 0);
+  assert.equal(timer.master!.gain.value, 0);
+  assert.equal(context(timer).oscillators.length, 0);
+  assert.equal(context(timer).buffers[0].loop, false);
+});
+
+test("Glass buffer cache respects each context sample rate", async () => {
+  const first = new AudioEngine();
+  await first.preview("notification");
+  Context.rate = 16000;
+  const second = new AudioEngine();
+  await second.preview("notification");
+  const a = context(first).buffers[0].buffer!;
+  const b = context(second).buffers[0].buffer!;
+  assert.notEqual(a, b);
+  assert.equal(a.sampleRate, 8000);
+  assert.equal(b.sampleRate, 16000);
+  near(a.duration, b.duration);
+});
+
+test("timer clock waits for audio unlock and cancellation prevents late playback", async () => {
+  const gate = deferred<void>();
+  Context.resumeGate = gate.promise;
   const engine = new AudioEngine();
-  const started = engine.start(timerWith("nepal-bell"), 0, 65);
-  await tick();
+  const starting = engine.start(timerWith("start"), 0, 65);
   assert.equal(engine.running, false);
   assert.equal(context(engine).buffers.length, 0);
   context(engine).currentTime = 20;
-  pending.resolve(response());
-  assert.equal(await started, true);
+  gate.resolve();
+  assert.equal(await starting, true);
   assert.equal(engine.startedAt, 20.06);
   assert.equal(context(engine).buffers[0].starts[0][0], 20.06);
+
+  const pending = deferred<void>();
+  Context.resumeGate = pending.promise;
+  const cancelled = new AudioEngine();
+  const playing = cancelled.start(timerWith("start"), 0, 65);
+  cancelled.stop();
+  pending.resolve();
+  assert.equal(await playing, false);
+  assert.equal(cancelled.running, false);
+  assert.equal(context(cancelled).buffers.length, 0);
 });
 
-test("master volume changes during a download are not overwritten at playback", async () => {
-  const pending = deferred<Response>();
-  globalThis.fetch = () => pending.promise;
+test("cancelling a pending preview cannot play late or call its end callback", async () => {
+  const gate = deferred<void>();
+  Context.resumeGate = gate.promise;
   const engine = new AudioEngine();
-  const started = engine.start(timerWith("bell-tree"), 0, 65);
-  await tick();
-  engine.setVolume(0);
-  pending.resolve(response());
-  await started;
-  assert.equal(engine.master!.gain.value, 0);
+  let ended = false;
+  const playing = engine.preview("select", 70, 65, () => { ended = true; });
+  engine.stop();
+  gate.resolve();
+  assert.equal(await playing, false);
+  assert.equal(context(engine).buffers.length, 0);
+  assert.equal(ended, false);
 });
 
-test("resuming a cue continues its short tail without repeating the recording", async () => {
+test("resuming a cue continues its tail without repeating the attack", async () => {
   const engine = new AudioEngine();
-  await engine.start(timerWith("hand-chime"), 1, 65);
+  await engine.start(timerWith("success"), 0.3, 65);
   const source = context(engine).buffers[0];
   assert.equal(source.loop, false);
-  assert.deepEqual(source.starts, [[0.06, 1]]);
-  assert.equal(source.stops[0], 2.06);
+  assert.deepEqual(source.starts, [[0.06, 0.3]]);
+  near(source.stops[0], 0.06 + source.buffer!.duration - 0.3);
   engine.stop();
   assert.equal(engine.sources.size, 0);
   assert.equal(source.disconnected, true);
 });
 
-test("natural one-shot tails are clipped exactly at the timer boundary", async () => {
-  const timer = timerWith("glockenspiel", 5);
+test("one-shot tails stop exactly at the timer boundary", async () => {
+  const timer = timerWith("achievement", 5);
   timer.tracks[0].events[0].at = 4;
   const engine = new AudioEngine();
   await engine.start(timer, 0, 65);
   const source = context(engine).buffers[0];
   assert.equal(source.loop, false);
   assert.deepEqual(source.starts, [[4.06, 0]]);
-  assert.ok(Math.abs(source.stops[0] - 5.06) < 1e-10);
+  near(source.stops[0], 5.06);
 });
 
-test("continuing during a one-shot tail resumes the sample without another attack", async () => {
+test("Glass state loops play just one cycle in the sequencer and preview", async () => {
   const engine = new AudioEngine();
-  await engine.start(timerWith("vibraphone", 3), 1, 65);
-  const source = context(engine).buffers[0];
-  assert.deepEqual(source.starts, [[0.06, 1]]);
-  assert.equal(source.stops[0], 2.06);
+  await engine.start(timerWith("processing"), 0, 65);
+  await engine.preview("processing");
+  const [transport, preview] = context(engine).buffers;
+  assert.equal(transport.loop, false);
+  assert.equal(preview.loop, false);
+  near(transport.stops[0], 1.66);
+  near(preview.stops[0], 1.62);
 });
 
-test("cancelling a pending preview cannot play late or call its end callback", async () => {
-  const pending = deferred<Response>();
-  globalThis.fetch = () => pending.promise;
-  const engine = new AudioEngine();
-  let ended = false;
-  const playing = engine.preview("marimba", 70, 65, () => {
-    ended = true;
-  });
-  await tick();
-  engine.stop();
-  pending.resolve(response());
-  assert.equal(await playing, false);
-  assert.equal(context(engine).buffers.length, 0);
-  assert.equal(ended, false);
-});
-
-test("failed sample loads report the sound name and can be retried", async () => {
-  let requests = 0;
-  globalThis.fetch = async () =>
-    ++requests === 1 ? new Response(null, { status: 503 }) : response();
-  const engine = new AudioEngine();
-  await assert.rejects(
-    engine.preview("woodblock"),
-    (error: Error) =>
-      error instanceof SampleLoadError && error.message.includes("Вудблок"),
-  );
-  assert.equal(engine.sources.size, 0);
-  assert.equal(await engine.preview("woodblock"), true);
-  assert.equal(requests, 2);
-});
-
-test("preview and timer share one download and honor zero master volume", async () => {
-  let requests = 0;
-  globalThis.fetch = async () => {
-    requests++;
-    return response();
-  };
-  const preview = new AudioEngine();
-  const timer = new AudioEngine();
-  await Promise.all([
-    preview.preview("claves", 70, 0),
-    timer.start(timerWith("claves"), 0, 0),
-  ]);
-  assert.equal(requests, 1);
-  assert.equal(preview.master!.gain.value, 0);
-  assert.equal(timer.master!.gain.value, 0);
-  assert.equal(context(timer).oscillators.length, 0);
-});
-
-test("muted and empty sample tracks need no download; legacy synth still works", async () => {
-  globalThis.fetch = async () => {
-    throw new Error("Unexpected network request");
-  };
-  const timer = timerWith("triangle");
+test("muted, zero-volume and empty tracks do not render or schedule audio", async () => {
+  const timer = timerWith("error");
   timer.tracks[0].muted = true;
-  timer.tracks.push(makeTrack("gong"), ...timerWith("pulse").tracks);
+  timer.tracks.push(makeTrack("warning"), { ...timerWith("blocked").tracks[0], volume: 0 });
   const engine = new AudioEngine();
   assert.equal(await engine.start(timer, 0, 65), true);
-  assert.equal(context(engine).buffers.length, 1);
-  assert.equal(context(engine).buffers[0].buffer!.duration, 0.65);
-  assert.equal(context(engine).buffers[0].loop, false);
+  assert.equal(context(engine).buffers.length, 0);
 });
 
-test("short percussion plays once and never fills the interval with repeats", async () => {
-  globalThis.fetch = async () => response(0.2);
+test("completed short cues do not restart after seeking past their tail", async () => {
   const engine = new AudioEngine();
-  await engine.start(timerWith("shaker"), 0, 65);
-  const source = context(engine).buffers[0];
-  assert.equal(source.buffer!.duration, 0.2);
-  assert.equal(source.loop, false);
-  assert.deepEqual(source.starts, [[0.06, 0]]);
-  assert.equal(source.stops[0], 0.26);
-  await engine.start(timerWith("shaker"), 1, 65);
+  await engine.start(timerWith("press"), 1, 65);
   assert.equal(engine.sources.size, 0);
 });
 
-test("stopping transport while it loads prevents an unexpected late start", async () => {
-  const pending = deferred<Response>();
-  globalThis.fetch = () => pending.promise;
+test("preview ends once and releases its source", async () => {
   const engine = new AudioEngine();
-  const playing = engine.start(timerWith("tubular-bell"), 0, 65);
-  await tick();
-  engine.stop();
-  pending.resolve(response());
-  assert.equal(await playing, false);
-  assert.equal(engine.running, false);
-  assert.equal(context(engine).buffers.length, 0);
-});
-
-test("even an oversized recording is capped at three seconds in transport and preview", async () => {
-  globalThis.fetch = async () => response(8);
-  const engine = new AudioEngine();
-  await engine.start(timerWith("gong"), 0, 65);
-  assert.equal(context(engine).buffers[0].loop, false);
-  assert.equal(context(engine).buffers[0].stops[0], 3.06);
-  await engine.preview("gong");
-  assert.equal(context(engine).buffers[1].loop, false);
-  assert.equal(context(engine).buffers[1].stops[0], 3.02);
-});
-
-test("completed cues do not restart after seeking past their tail", async () => {
-  const engine = new AudioEngine();
-  await engine.start(timerWith("vibraphone"), 4, 65);
-  assert.equal(context(engine).buffers.length, 0);
-});
-
-test("synthesized cues also play once and resume without another attack", async () => {
-  const engine = new AudioEngine();
-  await engine.start(timerWith("pulse"), 0.3, 65);
+  let ended = 0;
+  await engine.preview("press", 70, 65, () => { ended++; });
   const source = context(engine).buffers[0];
-  assert.equal(source.loop, false);
-  assert.equal(source.buffer!.duration, 0.65);
-  assert.equal(source.starts[0][1], 0.3);
-  assert.ok(Math.abs(source.stops[0] - 0.41) < 1e-10);
+  source.onended!();
+  source.onended!();
+  assert.equal(ended, 1);
+  assert.equal(engine.sources.size, 0);
+  assert.equal(source.disconnected, true);
+});
+
+test("failed Glass preparation reports the sound and can be retried", async () => {
+  const engine = new AudioEngine();
+  const createBuffer = Context.prototype.createBuffer;
+  let attempts = 0;
+  Context.prototype.createBuffer = function (...args) {
+    if (++attempts === 1) throw new Error("Audio allocation failed");
+    return createBuffer.apply(this, args);
+  };
+  try {
+    await assert.rejects(engine.preview("coupon"), (error: Error) =>
+      error instanceof SoundLoadError && error.message.includes("Купон"));
+    assert.equal(engine.sources.size, 0);
+    assert.equal(await engine.preview("coupon"), true);
+    assert.equal(attempts, 2);
+  } finally {
+    Context.prototype.createBuffer = createBuffer;
+  }
+});
+
+test("all 78 Glass cues render audible finite audio with accurate short durations", () => {
+  assert.equal(sounds.length, 78);
+  for (const sound of sounds) {
+    const rendered = renderRecipe(createRecipe("glass", sound.id), 44100);
+    near(rendered.duration, getSound(sound.id).duration);
+    assert.ok(rendered.duration > 0 && rendered.duration <= 3, sound.id);
+    assert.ok(rendered.left.every(Number.isFinite), sound.id);
+    assert.ok(rendered.right.every(Number.isFinite), sound.id);
+    assert.ok(rendered.peak > 0, sound.id);
+  }
 });
 
 test("one-second stopwatch loops precisely using one source for an hour", async () => {

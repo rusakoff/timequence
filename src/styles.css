@@ -1747,17 +1747,17 @@ h1 {
 .sounds-dialog > :not(.sound-library) {
   flex-shrink: 0;
 }
-.sound-tabs {
-  width: fit-content;
+.sound-search {
+  width: 100%;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
 }
-.sound-tabs button {
-  min-height: 36px;
-  padding: 8px 14px;
-}
-.sound-tabs span {
-  font-size: 11px;
-  margin-left: 4px;
-  color: var(--muted);
+.sound-empty {
+  grid-column: 1 / -1;
+  padding: 16px 8px;
 }
 .sound-library {
   display: grid;

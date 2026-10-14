@@ -1,117 +1,25 @@
+import { createRecipe, renderRecipe } from "uisfx";
 import { clamp, type SoundId, type Timer, type Track } from "./model.ts";
-import { getSound, MAX_SOUND_DURATION, type SynthSoundId } from "./sounds.ts";
+import { getSound, MAX_SOUND_DURATION, SOUND_PACK } from "./sounds.ts";
 
-// Share decoded recordings between the editor preview and timer transport.
-// Failed requests are evicted so the same button can retry after reconnecting.
-const sampleCache = new Map<string, Promise<AudioBuffer>>();
-const synthCache = new Map<string, Promise<AudioBuffer>>();
+// Share deterministic Glass buffers between preview and transport, per sample rate.
+const soundCache = new Map<string, AudioBuffer>();
+export class SoundLoadError extends Error {}
 
-export class SampleLoadError extends Error {}
-
-function loadSample(ctx: AudioContext, sound: SoundId): Promise<AudioBuffer> {
-  const definition = getSound(sound);
-  const url = definition.file!;
-  let pending = sampleCache.get(url);
-  if (!pending) {
-    pending = (async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await ctx.decodeAudioData(await response.arrayBuffer());
-      } catch {
-        throw new SampleLoadError(
-          `Не удалось загрузить «${definition.name}». Проверьте соединение и попробуйте ещё раз.`,
-        );
-      } finally {
-        clearTimeout(timeout);
-      }
-    })();
-    sampleCache.set(url, pending);
-    void pending.catch(() => sampleCache.delete(url));
-  }
-  return pending;
-}
-
-// Render each synthesized cue once and share the same one-shot playback path.
-function loadSound(ctx: AudioContext, sound: SoundId): Promise<AudioBuffer> {
-  const definition = getSound(sound);
-  if (definition.kind === "sample") return loadSample(ctx, sound);
+async function loadSound(ctx: AudioContext, sound: SoundId): Promise<AudioBuffer> {
   const key = `${sound}:${ctx.sampleRate}`;
-  let pending = synthCache.get(key);
-  if (!pending) {
-    pending = (async () => {
-      const duration = definition.duration;
-      const offline = new OfflineAudioContext(
-        1,
-        Math.ceil(ctx.sampleRate * duration),
-        ctx.sampleRate,
-      );
-      const gain = offline.createGain();
-      gain.connect(offline.destination);
-      gain.gain.setValueAtTime(0, 0);
-      gain.gain.linearRampToValueAtTime(
-        0.24,
-        Math.min(
-          sound.startsWith("tick") ? 0.001 : sound === "air" ? 0.3 : 0.015,
-          duration / 4,
-        ),
-      );
-      gain.gain.exponentialRampToValueAtTime(0.0001, duration - 0.002);
-      gain.gain.linearRampToValueAtTime(0, duration);
-      const schedule = (source: AudioScheduledSourceNode) => {
-        source.start(0);
-        source.stop(duration);
-      };
-      if (sound === "air" || sound === "wood") {
-        const buffer = offline.createBuffer(
-          1,
-          Math.ceil(offline.sampleRate * duration),
-          offline.sampleRate,
-        );
-        const data = buffer.getChannelData(0);
-        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-        const source = offline.createBufferSource();
-        source.buffer = buffer;
-        const filter = offline.createBiquadFilter();
-        filter.type = sound === "air" ? "lowpass" : "bandpass";
-        filter.frequency.value = sound === "air" ? 900 : 600;
-        filter.Q.value = sound === "air" ? 0.7 : 9;
-        source.connect(filter);
-        filter.connect(gain);
-        schedule(source);
-      } else {
-        const frequencies: Record<
-          Exclude<SynthSoundId, "air" | "wood">,
-          number[]
-        > = {
-          bell: [660, 1320],
-          pulse: [440],
-          bowl: [174, 348, 522],
-          chime: [784, 988, 1175],
-          tick: [1600, 3200],
-          "tick-accent": [1100, 2200],
-        };
-        frequencies[sound as Exclude<SynthSoundId, "air" | "wood">].forEach(
-          (frequency, index) => {
-            const oscillator = offline.createOscillator();
-            oscillator.type = sound === "pulse" ? "triangle" : "sine";
-            oscillator.frequency.value = frequency;
-            const partial = offline.createGain();
-            partial.gain.value = 1 / (index + 1);
-            oscillator.connect(partial);
-            partial.connect(gain);
-            schedule(oscillator);
-          },
-        );
-      }
-      return offline.startRendering();
-    })();
-    synthCache.set(key, pending);
-    void pending.catch(() => synthCache.delete(key));
+  const cached = soundCache.get(key);
+  if (cached) return cached;
+  try {
+    const rendered = renderRecipe(createRecipe(SOUND_PACK, sound), ctx.sampleRate);
+    const buffer = ctx.createBuffer(2, rendered.left.length, rendered.sampleRate);
+    buffer.copyToChannel(rendered.left, 0);
+    buffer.copyToChannel(rendered.right, 1);
+    soundCache.set(key, buffer);
+    return buffer;
+  } catch {
+    throw new SoundLoadError(`Не удалось подготовить «${getSound(sound).name}». Попробуйте ещё раз.`);
   }
-  return pending;
 }
 
 // Events are scheduled against the audio clock, never against rendering frames.

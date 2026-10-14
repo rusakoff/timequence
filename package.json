@@ -8,12 +8,14 @@
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && vite build --base=/timequence/",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --experimental-strip-types --test src/*.test.ts"
+    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "sounds:metadata": "node scripts/prepare-glass.mjs"
   },
   "dependencies": {
+    "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "lucide-react": "^0.468.0"
+    "uisfx": "^0.4.0"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

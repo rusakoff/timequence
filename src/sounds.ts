@@ -1,11 +1,11 @@
-import { sampleMetadata } from "./sample-metadata.ts";
+import { CUES, type CueName, type CategoryName } from "uisfx";
+import { glassDurations } from "./glass-durations.ts";
 
+export const SOUND_PACK = "glass";
+export const DEFAULT_SOUND: SoundId = "notification";
+export const TICK_SOUND: SoundId = "typing";
 export const MAX_SOUND_DURATION = 3;
-
-export type SynthSoundId =
-  "bell" | "pulse" | "wood" | "bowl" | "air" | "chime" | "tick" | "tick-accent";
-export type SampleSoundId = keyof typeof sampleMetadata;
-export type SoundId = SynthSoundId | SampleSoundId;
+export type SoundId = CueName;
 export type SoundIcon = "bell" | "pulse" | "wood" | "bowl" | "air" | "chime";
 export interface SoundDefinition {
   id: SoundId;
@@ -13,188 +13,91 @@ export interface SoundDefinition {
   detail: string;
   color: string;
   icon: SoundIcon;
-  kind: "sample" | "synth";
-  file?: string;
   duration: number;
-  waveform?: readonly number[];
 }
 
-const recordings: {
-  id: SampleSoundId;
-  name: string;
-  detail: string;
-  color: string;
-  icon: SoundIcon;
-}[] = [
-  {
-    id: "nepal-bell",
-    name: "Непальский колокольчик",
-    detail: "Короткий металлический звон",
-    color: "ink",
-    icon: "bell",
-  },
-  {
-    id: "hand-chime",
-    name: "Ручной колокол",
-    detail: "Мягкий металлический тон",
-    color: "sage",
-    icon: "bell",
-  },
-  {
-    id: "glockenspiel",
-    name: "Глокеншпиль",
-    detail: "Звонкая металлическая нота",
-    color: "blue",
-    icon: "chime",
-  },
-  {
-    id: "vibraphone",
-    name: "Вибрафон",
-    detail: "Низкий тон, мягкая палочка",
-    color: "sand",
-    icon: "bowl",
-  },
-  {
-    id: "marimba",
-    name: "Маримба",
-    detail: "Тёплая деревянная нота",
-    color: "clay",
-    icon: "wood",
-  },
-  {
-    id: "woodblock",
-    name: "Вудблок",
-    detail: "Короткий деревянный удар",
-    color: "clay",
-    icon: "wood",
-  },
-  {
-    id: "claves",
-    name: "Клавес",
-    detail: "Чёткий щелчок двух палочек",
-    color: "orange",
-    icon: "pulse",
-  },
-  {
-    id: "triangle",
-    name: "Треугольник",
-    detail: "Лёгкий серебристый звон",
-    color: "sage",
-    icon: "chime",
-  },
-  {
-    id: "gong",
-    name: "Гонг",
-    detail: "Глубокий низкий удар",
-    color: "sand",
-    icon: "bowl",
-  },
-  {
-    id: "tubular-bell",
-    name: "Трубчатый колокол",
-    detail: "Объёмный, насыщенный звон",
-    color: "ink",
-    icon: "bell",
-  },
-  {
-    id: "shaker",
-    name: "Шейкер",
-    detail: "Короткий шорох",
-    color: "blue",
-    icon: "air",
-  },
-  {
-    id: "bell-tree",
-    name: "Перелив колокольчиков",
-    detail: "Россыпь звенящих нот",
-    color: "orange",
-    icon: "chime",
-  },
-];
+const names: Record<SoundId, string> = {
+  hover: "Наведение", press: "Нажатие", release: "Отпускание",
+  "double-click": "Двойной щелчок", focus: "Фокус", "long-press": "Удержание",
+  select: "Выбор", deselect: "Снятие выбора", "toggle-on": "Включение",
+  "toggle-off": "Выключение", check: "Отметка", uncheck: "Снятие отметки",
+  delete: "Удаление", cancel: "Отмена", undo: "Шаг назад", redo: "Повтор действия",
+  copy: "Копирование", paste: "Вставка", open: "Открытие", close: "Закрытие",
+  back: "Назад", forward: "Вперёд", expand: "Разворачивание", collapse: "Сворачивание",
+  "drag-start": "Подхват", drop: "Приземление", snap: "Фиксация", swipe: "Смахивание",
+  reorder: "Перестановка", "invalid-drop": "Неверное положение",
+  send: "Отправка", receive: "Получение", notification: "Уведомление",
+  mention: "Упоминание", typing: "Печатный щелчок", reaction: "Реакция",
+  success: "Успех", error: "Ошибка", warning: "Предупреждение", info: "Информация",
+  blocked: "Запрет", retry: "Повторная попытка", start: "Старт", stop: "Остановка",
+  "progress-step": "Шаг прогресса", complete: "Завершение", queued: "Очередь",
+  checkpoint: "Контрольная точка", loading: "Загрузка", processing: "Обработка",
+  recording: "Запись", connecting: "Подключение", scanning: "Сканирование",
+  streaming: "Трансляция", play: "Воспроизведение", pause: "Пауза", seek: "Перемотка",
+  "volume-change": "Громкость", "skip-next": "Следующий трек",
+  "skip-previous": "Предыдущий трек", connect: "Соединение", disconnect: "Отключение",
+  lock: "Блокировка", unlock: "Разблокировка", wake: "Пробуждение", sleep: "Сон",
+  reward: "Награда", "level-up": "Новый уровень", achievement: "Достижение",
+  streak: "Серия успехов", badge: "Значок", bonus: "Бонус",
+  "add-to-cart": "В корзину", "remove-from-cart": "Из корзины", checkout: "Оформление",
+  purchase: "Покупка", coupon: "Купон", refund: "Возврат",
+};
 
-const publicBase = import.meta.env?.BASE_URL ?? "/";
+const categories: Record<CategoryName, [name: string, color: string, icon: SoundIcon]> = {
+  input: ["Касания", "ink", "pulse"],
+  selection: ["Выбор", "sage", "chime"],
+  navigation: ["Переходы", "blue", "air"],
+  editing: ["Действия", "clay", "pulse"],
+  movement: ["Движение", "sand", "pulse"],
+  communication: ["Сообщения", "blue", "bell"],
+  feedback: ["Сигналы", "orange", "bell"],
+  progress: ["Этапы", "sage", "chime"],
+  loops: ["Ритмы · один цикл", "ink", "air"],
+  media: ["Медиа", "clay", "pulse"],
+  system: ["Система", "sand", "bowl"],
+  reward: ["Награды", "orange", "chime"],
+  commerce: ["Покупки", "sage", "bell"],
+};
 
-export const sounds: SoundDefinition[] = [
-  ...recordings.map((sound): SoundDefinition => ({
-    ...sound,
-    kind: "sample",
-    file: `${publicBase}audio/vcsl/${sound.id}.mp3?v=short-3s`,
-    ...sampleMetadata[sound.id],
-  })),
-  {
-    id: "tick",
-    name: "Тик секундомера",
-    detail: "Тихий короткий щелчок",
-    color: "ink",
-    icon: "pulse",
-    kind: "synth",
-    duration: 0.04,
-  },
-  {
-    id: "tick-accent",
-    name: "Отсечка секундомера",
-    detail: "Чуть более звонкий щелчок",
-    color: "sand",
-    icon: "pulse",
-    kind: "synth",
-    duration: 0.07,
-  },
-  {
-    id: "bell",
-    name: "Мягкий звон",
-    detail: "Чистый и лёгкий",
-    color: "ink",
-    icon: "bell",
-    kind: "synth",
-    duration: 0.65,
-  },
-  {
-    id: "pulse",
-    name: "Пульс",
-    detail: "Короткий электронный сигнал",
-    color: "orange",
-    icon: "pulse",
-    kind: "synth",
-    duration: 0.65,
-  },
-  {
-    id: "bowl",
-    name: "Глубокий тон",
-    detail: "Тёплый и объёмный",
-    color: "sand",
-    icon: "bowl",
-    kind: "synth",
-    duration: 0.65,
-  },
-  {
-    id: "chime",
-    name: "Колокольчики",
-    detail: "Светлое созвучие",
-    color: "sage",
-    icon: "chime",
-    kind: "synth",
-    duration: 0.65,
-  },
-  {
-    id: "wood",
-    name: "Деревянный щелчок",
-    detail: "Сухой и мягкий",
-    color: "clay",
-    icon: "wood",
-    kind: "synth",
-    duration: 0.65,
-  },
-  {
-    id: "air",
-    name: "Воздух",
-    detail: "Плавный шумовой звук",
-    color: "blue",
-    icon: "air",
-    kind: "synth",
-    duration: 0.65,
-  },
-];
+export const sounds: SoundDefinition[] = CUES.map((cue) => {
+  const [category, color, icon] = categories[cue.category];
+  return {
+    id: cue.name, name: names[cue.name], detail: `${category} · ${cue.label}`,
+    color, icon, duration: glassDurations[cue.name],
+  };
+});
 
 export function getSound(id: SoundId): SoundDefinition {
   return sounds.find((sound) => sound.id === id)!;
+}
+
+// Restoration only: the old sounds are no longer offered or played.
+export const legacySounds = {
+  "nepal-bell": ["notification", "Непальский колокольчик", "ink"],
+  "hand-chime": ["info", "Ручной колокол", "sage"],
+  glockenspiel: ["success", "Глокеншпиль", "blue"],
+  vibraphone: ["complete", "Вибрафон", "sand"],
+  marimba: ["select", "Маримба", "clay"],
+  woodblock: ["press", "Вудблок", "clay"],
+  claves: ["snap", "Клавес", "orange"],
+  triangle: ["checkpoint", "Треугольник", "sage"],
+  gong: ["achievement", "Гонг", "sand"],
+  "tubular-bell": ["reward", "Трубчатый колокол", "ink"],
+  shaker: ["swipe", "Шейкер", "blue"],
+  "bell-tree": ["level-up", "Перелив колокольчиков", "orange"],
+  bell: ["notification", "Мягкий звон", "ink"],
+  pulse: ["start", "Пульс", "orange"],
+  bowl: ["complete", "Глубокий тон", "sand"],
+  chime: ["success", "Колокольчики", "sage"],
+  wood: ["press", "Деревянный щелчок", "clay"],
+  air: ["swipe", "Воздух", "blue"],
+  tick: ["typing", "Тик секундомера", "ink"],
+  "tick-accent": ["snap", "Отсечка секундомера", "sand"],
+} as const satisfies Record<string, readonly [SoundId, string, string]>;
+
+export function restoreSoundId(id: unknown): SoundId | null {
+  if (typeof id !== "string") return null;
+  if (Object.hasOwn(legacySounds, id))
+    return legacySounds[id as keyof typeof legacySounds][0];
+  return sounds.some((sound) => sound.id === id) ? id as SoundId : null;
 }

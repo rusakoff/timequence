@@ -27,8 +27,8 @@ test("all examples and new timers have one independent stopwatch track", () => {
   }
 });
 
-test("v8 migration adds one-second ticks once and retains user settings in v10", () => {
-  const original = { ...makeTimer(), tracks: [makeTrack("nepal-bell")] };
+test("v8 migration adds one-second ticks once and retains user settings in v11", () => {
+  const original = { ...makeTimer(), tracks: [makeTrack("notification")] };
   const raw = JSON.stringify({ version: 8, timers: [original] });
   const migrated = loadTimers((key) =>
     key === "timequence.timers.v8" ? raw : null,
@@ -45,10 +45,10 @@ test("v8 migration adds one-second ticks once and retains user settings in v10",
 });
 
 test("v9 migration removes only the five-second track and honors deleted one-second ticks", () => {
-  const action = makeTrack("nepal-bell");
+  const action = makeTrack("notification");
   const one = { ...makeTickTrack(1), muted: true, volume: 17 };
   const five = {
-    ...makeTrack("tick-accent"),
+    ...makeTrack("snap"),
     name: "Тик · 5 с",
     tickEvery: 5 as const,
   };
@@ -72,7 +72,7 @@ test("v9 migration removes only the five-second track and honors deleted one-sec
 test("one stopwatch track fits alongside 16 action tracks and validates its interval", () => {
   const timer = withTickTracks({
     ...makeTimer(),
-    tracks: Array.from({ length: 16 }, () => makeTrack("woodblock")),
+    tracks: Array.from({ length: 16 }, () => makeTrack("press")),
   });
   assert.equal(timer.tracks.length, 17);
   assert.ok(validTimers([timer]));
