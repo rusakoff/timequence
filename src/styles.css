@@ -2906,16 +2906,14 @@ h1 {
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  background: #ffffff;
-  color: var(--ink);
-  box-shadow: 0 3px 10px #22222208;
+  box-shadow: none;
 }
 .track-select .sound-icon svg {
   width: 19px;
   height: 19px;
 }
 .track-select.selected .sound-icon {
-  box-shadow: 0 0 0 1px var(--orange), 0 3px 10px #22222208;
+  box-shadow: 0 0 0 1px var(--cue-color);
 }
 .track-select.selected strong {
   color: var(--ink);

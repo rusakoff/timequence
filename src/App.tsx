@@ -1582,7 +1582,7 @@ export default function App() {
                                     setSelection({ track: track.id })
                                   }
                                 >
-                                  <span className="sound-icon">
+                                  <span className={`sound-icon color-${track.color}`}>
                                     <SoundIcon size={20} strokeWidth={1.6} />
                                   </span>
                                   <strong>{track.name}</strong>
