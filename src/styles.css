@@ -2015,10 +2015,20 @@ h1 {
 
 /* Zen enlarges the interval between cues into one readable track segment. */
 .dialog.zen-dialog {
-  width: calc(100vw - 48px);
-  max-width: 1120px;
-  max-height: calc(100dvh - 48px);
-  padding: 28px;
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: clamp(20px, 3vw, 48px);
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+  box-shadow: none;
+  overflow: hidden;
 }
 .zen-dialog::backdrop {
   background: #252b2299;
@@ -2033,6 +2043,8 @@ h1 {
   flex-direction: column;
   gap: 22px;
   min-width: 0;
+  height: 100%;
+  overflow-y: auto;
 }
 .zen-header {
   display: flex;
@@ -2056,7 +2068,8 @@ h1 {
   position: relative;
   isolation: isolate;
   overflow: hidden;
-  min-height: min(430px, 52dvh);
+  flex: 1 0 min(300px, 45dvh);
+  min-height: min(300px, 45dvh);
   background: color-mix(in srgb, var(--cue-color) 16%, var(--surface));
   border-radius: 4px;
   transition: background-color 220ms var(--ease);
@@ -2079,6 +2092,7 @@ h1 {
 }
 .zen-segment-content {
   min-height: inherit;
+  height: 100%;
   display: flex;
   flex-direction: column;
   padding: 28px 36px 50px;
@@ -2102,7 +2116,7 @@ h1 {
   justify-content: center;
   gap: 10px;
   min-height: 135px;
-  max-height: 38dvh;
+  max-height: none;
   overflow-y: auto;
   padding: 20px 0;
   scrollbar-width: thin;
@@ -2259,27 +2273,9 @@ h1 {
   line-height: 1.6;
   color: var(--accent-text);
 }
-.zen-mode:fullscreen {
-  width: 100vw;
-  height: 100dvh;
-  padding: clamp(20px, 4vw, 64px);
-  background: var(--surface);
-  overflow-y: auto;
-}
-.zen-mode:fullscreen .zen-segment {
-  flex: 1;
-}
-.zen-mode:fullscreen .zen-segment-content {
-  height: 100%;
-}
-.zen-mode:fullscreen .zen-current {
-  max-height: none;
-}
 @media (max-width: 700px) {
   .dialog.zen-dialog {
-    width: calc(100vw - 24px);
-    max-height: calc(100dvh - 24px);
-    padding: 18px;
+    padding: max(18px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
   .zen-dialog .dialog-close {
     top: 12px;
@@ -2346,7 +2342,6 @@ h1 {
 @media (max-height: 500px) and (min-width: 701px) {
   .dialog.zen-dialog {
     padding: 16px 24px;
-    max-height: calc(100dvh - 16px);
   }
   .zen-mode {
     gap: 10px;

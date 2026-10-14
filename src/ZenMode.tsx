@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import {
   ArrowRight,
-  Expand,
   LoaderCircle,
-  Minimize,
   Pause,
   Play,
   RotateCcw,
@@ -36,10 +34,6 @@ export function ZenMode({
   onRestart,
   onMute,
 }: Props) {
-  const zenRef = useRef<HTMLDivElement>(null);
-  const [fullscreen, setFullscreen] = useState(false);
-  const ownsFullscreen = useRef(false);
-  const [screenError, setScreenError] = useState("");
   const moments = useMemo(() => cueMoments(timer), [timer]);
   const segment = currentSegment(moments, timer.duration, position);
   const tracks = segment.current?.tracks ?? [];
@@ -72,38 +66,8 @@ export function ZenMode({
         ? "Новый цикл"
         : "Завершение";
 
-  useEffect(() => {
-    const zen = zenRef.current;
-    const update = () => setFullscreen(document.fullscreenElement === zen);
-    update();
-    document.addEventListener("fullscreenchange", update);
-    return () => {
-      document.removeEventListener("fullscreenchange", update);
-      if (ownsFullscreen.current && document.fullscreenElement === zen)
-        void document.exitFullscreen().catch(() => {});
-    };
-  }, []);
-
-  async function toggleFullscreen() {
-    setScreenError("");
-    const zen = zenRef.current;
-    if (!zen) return;
-    try {
-      if (fullscreen) await document.exitFullscreen();
-      else {
-        await zen.requestFullscreen();
-        ownsFullscreen.current = true;
-      }
-    } catch {
-      setScreenError(
-        "Не удалось развернуть окно. Дзен-режим продолжает работать здесь.",
-      );
-    }
-  }
-
   return (
     <div
-      ref={zenRef}
       className="zen-mode"
       onKeyDown={(event) => {
         if (
@@ -242,23 +206,11 @@ export function ZenMode({
             {muted ? <VolumeX size={20} /> : <Volume2 size={20} />}
             <span>{muted ? "Без звука" : "Звук включён"}</span>
           </button>
-          {document.fullscreenEnabled && (
-            <button
-              className="icon-btn"
-              onClick={toggleFullscreen}
-              aria-label={
-                fullscreen ? "Выйти из полного экрана" : "На весь экран"
-              }
-              title={fullscreen ? "Выйти из полного экрана" : "На весь экран"}
-            >
-              {fullscreen ? <Minimize size={20} /> : <Expand size={20} />}
-            </button>
-          )}
         </div>
       </footer>
-      {(error || screenError) && (
+      {error && (
         <p className="zen-error" role="alert">
-          {error || screenError}
+          {error}
         </p>
       )}
     </div>
