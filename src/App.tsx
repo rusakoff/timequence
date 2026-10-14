@@ -103,6 +103,7 @@ type Modal =
   | "zen"
   | "timers"
   | "timer-actions"
+  | "step"
   | null;
 const countLabel = (n: number, forms: [string, string, string]) =>
   `${n} ${forms[n % 100 >= 11 && n % 100 <= 14 ? 2 : n % 10 === 1 ? 0 : n % 10 >= 2 && n % 10 <= 4 ? 1 : 2]}`;
@@ -432,6 +433,8 @@ export default function App() {
     setInspectorOpen(!!next);
   }
   const [modal, setModal] = useState<Modal>(null);
+  const [mobileStepValue, setMobileStepValue] = useState(1);
+  const [mobileMixerOpen, setMobileMixerOpen] = useState(false);
   const [pendingStep, setPendingStep] = useState<{ timerId: string; step: number } | null>(null);
   const [soundChoice, setSoundChoice] = useState<SoundId>("nepal-bell");
   const [soundGroup, setSoundGroup] = useState<"sample" | "synth">("sample");
@@ -570,6 +573,10 @@ export default function App() {
       return;
     }
     updateTimer(next);
+  }
+  function applyMobileStep(value: number) {
+    closeModal();
+    changeStep(value);
   }
   const selectedTrack = timer?.tracks.find((t) => t.id === selection?.track);
   const selectedEvent = selectedTrack?.events.find(
@@ -1382,6 +1389,20 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                    <button
+                      className="mobile-step-button"
+                      type="button"
+                      disabled={locked || !!drag}
+                      aria-label={`Изменить шаг сетки: ${timer.step} с`}
+                      onClick={() => {
+                        setMobileStepValue(timer.step);
+                        setModal("step");
+                      }}
+                    >
+                      <span>Шаг сетки</span>
+                      <strong>{timer.step} с</strong>
+                      <ChevronDown size={15} aria-hidden="true" />
+                    </button>
                   </div>
                   <div className="history-controls">
                     <button
@@ -2012,12 +2033,19 @@ export default function App() {
                   </div>
                 </SettingsPopover>
               )}
-              <section className="mobile-mixer" aria-label="Микшер дорожек">
-                <div className="mobile-mixer-title">
+              <section className={`mobile-mixer ${mobileMixerOpen ? "is-open" : ""}`} aria-label="Микшер дорожек">
+                <button
+                  type="button"
+                  className="mobile-mixer-title"
+                  aria-expanded={mobileMixerOpen}
+                  aria-controls="mobile-mixer-list"
+                  onClick={() => setMobileMixerOpen((open) => !open)}
+                >
                   <SlidersHorizontal size={16} aria-hidden="true" />
                   <span>Громкость дорожек</span>
-                </div>
-                <div className="mobile-mixer-list">
+                  <ChevronDown size={16} aria-hidden="true" />
+                </button>
+                <div className="mobile-mixer-list" id="mobile-mixer-list" hidden={!mobileMixerOpen}>
                   {timer.tracks.map((track) => (
                     <label
                       className={`mobile-mixer-row color-${track.color} ${track.muted ? "is-muted" : ""}`}
@@ -2201,6 +2229,33 @@ export default function App() {
           close={closeModal}
         >
           <h2>{timer.name}</h2>
+          <div className="mobile-quick-actions" role="group" aria-label="Действия редактора">
+            <button
+              type="button"
+              disabled={locked || !history.length}
+              onClick={() => { undo(); closeModal(); }}
+            >
+              <Undo2 size={18} />
+              Отменить
+            </button>
+            <button
+              type="button"
+              disabled={locked || !future.length}
+              onClick={() => { redo(); closeModal(); }}
+            >
+              <Redo2 size={18} />
+              Повторить
+            </button>
+            <button
+              type="button"
+              aria-pressed={timer.loop}
+              disabled={locked}
+              onClick={() => updateTimer({ ...timer, loop: !timer.loop })}
+            >
+              <Repeat2 size={18} />
+              Повтор
+            </button>
+          </div>
           <div className="action-list">
             <button disabled={locked} onClick={() => setModal("edit")}>
               <Pencil size={18} />
@@ -2223,6 +2278,52 @@ export default function App() {
             >
               <Trash2 size={18} />
               Удалить таймер
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {modal === "step" && timer && (
+        <Dialog label="Шаг сетки" className="step-picker-dialog" close={closeModal}>
+          <h2>Шаг сетки</h2>
+          <p className="muted">Интервал между клетками. Если сигналы не попадут на новую сетку, покажем их новое время перед сохранением.</p>
+          <div className="step-picker-presets" role="group" aria-label="Выбрать шаг сетки">
+            {([1, 5, 10, 20, 30] as const).map((step) => (
+              <button
+                key={step}
+                type="button"
+                aria-pressed={timer.step === step}
+                disabled={step > timer.duration}
+                onClick={() => applyMobileStep(step)}
+              >
+                {step} с
+              </button>
+            ))}
+          </div>
+          <label className="form-field step-picker-custom">
+            Свой шаг, секунд
+            <input
+              type="number"
+              inputMode="numeric"
+              min="1"
+              max={timer.duration}
+              step="1"
+              value={Number.isNaN(mobileStepValue) ? "" : mobileStepValue}
+              onChange={(event) => setMobileStepValue(event.target.value === "" ? NaN : Number(event.target.value))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && Number.isInteger(mobileStepValue) && mobileStepValue >= 1 && mobileStepValue <= timer.duration) {
+                  applyMobileStep(mobileStepValue);
+                }
+              }}
+            />
+          </label>
+          <div className="dialog-actions">
+            <button className="btn secondary" onClick={closeModal}>Отмена</button>
+            <button
+              className="btn primary"
+              disabled={!Number.isInteger(mobileStepValue) || mobileStepValue < 1 || mobileStepValue > timer.duration}
+              onClick={() => applyMobileStep(mobileStepValue)}
+            >
+              Применить
             </button>
           </div>
         </Dialog>
