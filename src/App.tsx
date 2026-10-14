@@ -1109,6 +1109,10 @@ export default function App() {
         (event) =>
           position >= event.at && position < event.at + SOUND_PULSE_SECONDS,
       );
+    const occurred =
+      position > 0 &&
+      !pulsing &&
+      groupedEvents.every((event) => position > event.at);
     return (
       <div
         role="button"
@@ -1122,7 +1126,7 @@ export default function App() {
           selected && inspectorOpen ? "sound-properties" : undefined
         }
         key={ev.id}
-        className={`sound-event color-${track.color} ${selected ? "selected" : ""} ${active ? "sounding" : ""} ${pulsing ? "pulsing" : ""} ${d?.moved ? "dragging" : ""}`}
+        className={`sound-event color-${track.color} ${selected ? "selected" : ""} ${active ? "sounding" : ""} ${pulsing ? "pulsing" : ""} ${occurred ? "occurred" : ""} ${d?.moved ? "dragging" : ""}`}
         style={
           {
             "--event-start": `${cellStart}px`,
