@@ -44,6 +44,7 @@ import {
 import { AudioEngine, SampleLoadError } from "./audio";
 import { SettingsPopover } from "./SettingsPopover";
 import { ZenMode } from "./ZenMode";
+import { Home } from "./Home";
 import { initialTimers } from "./examples";
 import { loadTimers, serializeTimers, STORAGE } from "./storage";
 import { getSound, MAX_SOUND_DURATION } from "./sounds";
@@ -94,6 +95,7 @@ type Drag = {
   scale: number;
 };
 type Modal =
+  | "home"
   | "create"
   | "edit"
   | "sounds"
@@ -419,17 +421,29 @@ function TimerForm({
   );
 }
 
-export default function App() {
+export default function App({ entry }: { entry?: string }) {
+  const entryName = entry === "breathing"
+    ? DEFAULT_TIMER_NAME
+    : entry === "tabata" ? "Табата · 20 / 10" : undefined;
   const [storageMessage, setStorageMessage] = useState("");
   const [timers, setTimers] = useState<Timer[]>(() => {
+    let loaded: Timer[];
     try {
-      return loadTimers((key) => localStorage.getItem(key));
+      loaded = loadTimers((key) => localStorage.getItem(key));
     } catch {
       /* Keep the editor usable when storage is unavailable. */
+      loaded = initialTimers();
     }
-    return initialTimers();
+    // Explicit example links can restore an example previously removed by the user.
+    if (entryName && !loaded.some((timer) => timer.name === entryName)) {
+      const example = initialTimers().find((timer) => timer.name === entryName);
+      if (example && loaded.length < 100) loaded = [...loaded, example];
+    }
+    return loaded;
   });
-  const [activeId, setActiveId] = useState(() => defaultTimer(timers)?.id ?? "");
+  const [activeId, setActiveId] = useState(() =>
+    timers.find((timer) => timer.name === entryName)?.id ?? defaultTimer(timers)?.id ?? "",
+  );
   const timer = timers.find((t) => t.id === activeId) ?? defaultTimer(timers);
   const [selection, setSelected] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
@@ -437,7 +451,12 @@ export default function App() {
     setSelected(next);
     setInspectorOpen(!!next);
   }
-  const [modal, setModal] = useState<Modal>(null);
+  const [modal, setModal] = useState<Modal>(
+    !/^#app(?:\/|$)/.test(window.location.hash)
+      ? "home"
+      : entry === "new" && timers.length < 100 ? "create" : null,
+  );
+  const [welcomeError, setWelcomeError] = useState("");
   const [mobileStepValue, setMobileStepValue] = useState(1);
   const [mobileMixerOpen, setMobileMixerOpen] = useState(false);
   const [pendingStep, setPendingStep] = useState<{ timerId: string; step: number } | null>(null);
@@ -645,6 +664,32 @@ export default function App() {
     stopPreview();
     setModal(null);
   };
+  function openHome() {
+    stopPreview();
+    setInspectorOpen(false);
+    setWelcomeError("");
+    setModal("home");
+  }
+  function openExample(example: "breathing" | "tabata") {
+    const name = example === "breathing" ? DEFAULT_TIMER_NAME : "Табата · 20 / 10";
+    const saved = timers.find((item) => item.name === name);
+    if (saved) {
+      switchTimer(saved.id);
+      closeModal();
+      return;
+    }
+    if (timers.length >= 100) {
+      setWelcomeError("Чтобы добавить этот пример, сначала удалите один из сохранённых таймеров.");
+      return;
+    }
+    const added = initialTimers().find((item) => item.name === name)!;
+    stop(true);
+    stopPreview();
+    commit([...timers, added]);
+    setActiveId(added.id);
+    setSelection(null);
+    setModal(null);
+  }
 
   useEffect(() => {
     try {
@@ -903,6 +948,8 @@ export default function App() {
   }
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
+      // The welcome dialog owns keyboard input; Space activates its focused button.
+      if (modal === "home") return;
       const target = e.target instanceof Element ? e.target : null;
       const inForm = !!target?.closest(
         "form,input,select,textarea,[contenteditable]:not([contenteditable='false']),[role='textbox']",
@@ -955,7 +1002,10 @@ export default function App() {
     updateTrack(track.id, {
       events: [...track.events, e].sort((a, b) => a.at - b.at),
     });
-    setSelection({ track: track.id, event: e.id });
+    // Placing a cue stays lightweight; its settings open on a subsequent click.
+    setSelected({ track: track.id, event: e.id });
+    setInspectorOpen(false);
+    stopPreview();
   }
   function beginDrag(
     e: React.PointerEvent<HTMLElement>,
@@ -1194,7 +1244,8 @@ export default function App() {
           </span>
           timequence
         </a>
-        <nav aria-label="Помощь">
+        <nav aria-label="Навигация и помощь">
+          <button className="app-home-link" onClick={openHome}>О приложении</button>
           <button
             aria-label="Как это работает"
             onClick={() => setModal("help")}
@@ -1248,6 +1299,7 @@ export default function App() {
               </span>
               <h1>Ваш первый таймер</h1>
               <p>Создайте первый таймер и расставьте звуки на шкале.</p>
+              <button className="editor-home-link" onClick={openHome}>О приложении</button>
               <button
                 className="btn primary"
                 onClick={() => setModal("create")}
@@ -2210,6 +2262,7 @@ export default function App() {
           className="timers-dialog"
           close={closeModal}
         >
+          <button className="editor-home-link" onClick={openHome}>О приложении</button>
           <h2>
             Мои таймеры <span className="count">{timers.length}</span>
           </h2>
@@ -2297,6 +2350,7 @@ export default function App() {
               Удалить таймер
             </button>
           </div>
+          <button className="editor-home-link" onClick={openHome}>О приложении</button>
         </Dialog>
       )}
       {modal === "step" && timer && (
@@ -2574,6 +2628,30 @@ export default function App() {
               Удалить таймер
             </button>
           </div>
+        </Dialog>
+      )}
+      {modal === "home" && (
+        <Dialog label="О Timequence" className="welcome-dialog" close={closeModal}>
+          <Home
+            onContinue={closeModal}
+            onExample={openExample}
+            onCreate={() => { stop(); setModal("create"); }}
+            canCreate={timers.length < 100}
+            error={welcomeError}
+            player={timer && (
+              <ZenMode
+                timer={timer}
+                position={position}
+                playing={playing}
+                busy={busy}
+                muted={volume === 0}
+                error={transportError}
+                onPlay={() => void togglePlay()}
+                onRestart={() => stop(true)}
+                onMute={toggleMute}
+              />
+            )}
+          />
         </Dialog>
       )}
       {modal === "help" && (

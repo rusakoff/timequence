@@ -18,3 +18,7 @@ python3 scripts/prepare-samples.py
 ```
 
 Скрипт скачивает только выбранные записи из закреплённой версии, создаёт MP3, манифест и данные для формы волны. Контрольные суммы выходных файлов могут отличаться между версиями FFmpeg. Обычная сборка приложения не требует Python, FFmpeg или доступа к GitHub.
+
+## Шрифт Manrope
+
+Manrope (Mikhail Sharanda, Mirko Velimirovic), SIL Open Font License 1.1. Переменные WOFF2-файлы для кириллицы и латиницы поставляются локально в `public/fonts/`, без запроса к Google Fonts при открытии страницы. Текст лицензии: [public/fonts/OFL.txt](./public/fonts/OFL.txt). Источник: [Google Fonts](https://github.com/google/fonts/tree/main/ofl/manrope).
