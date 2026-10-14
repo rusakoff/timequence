@@ -3752,18 +3752,18 @@ h1 {
 
 @media (max-width: 700px) {
   .sequence-inner {
-    --track-label: 88px;
+    --track-label: 64px;
   }
   .track-column-caption {
-    justify-content: center;
-    padding-inline: 4px;
+    justify-content: flex-start;
+    padding: 0 4px;
     font-size: 10px;
   }
   .track-label {
-    padding: 0 4px 0 5px;
+    padding: 0 4px;
   }
   .track-select {
-    justify-content: center;
+    justify-content: flex-start;
     gap: 0;
   }
   .track-select strong {
@@ -3822,7 +3822,7 @@ h1 {
     display: flex;
     flex: 1 1 0;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     min-width: 0;
     min-height: 42px;
     padding: 5px 8px;
@@ -3851,6 +3851,7 @@ h1 {
   }
   .mobile-step-button svg {
     flex: 0 0 auto;
+    margin-left: auto;
     color: var(--muted);
   }
   .mobile-step-button:disabled {
@@ -3858,11 +3859,12 @@ h1 {
   }
   .sequencer-footer {
     min-height: 48px;
-    padding: 4px 8px;
+    padding: 4px;
   }
   .add-track {
     width: auto;
     min-height: 38px;
+    margin-left: 0;
     padding-inline: 17px;
     font-size: 12px;
   }
@@ -3872,6 +3874,7 @@ h1 {
   .mobile-mixer-title {
     width: 100%;
     min-height: 40px;
+    padding-inline: 4px;
     text-align: left;
   }
   .mobile-mixer-title > svg:last-child {
