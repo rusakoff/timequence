@@ -464,16 +464,6 @@ input[type="range"]:disabled {
   background: var(--white);
   border-color: var(--line);
 }
-.timer-card.current::before {
-  content: "";
-  position: absolute;
-  top: 11px;
-  bottom: 11px;
-  left: 0;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: var(--orange);
-}
 .timer-card-top {
   display: block;
 }
