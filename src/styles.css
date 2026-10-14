@@ -3382,7 +3382,8 @@ h1 {
   display: none;
 }
 .mobile-step-button,
-.mobile-quick-actions {
+.mobile-quick-actions,
+.mobile-track-mute {
   display: none;
 }
 .step-picker-presets {
@@ -3773,8 +3774,22 @@ h1 {
     height: 42px;
   }
   .mute-button {
-    width: 32px;
-    height: 44px;
+    display: none;
+  }
+  .mobile-track-mute {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    min-height: 42px;
+    padding: 0 12px;
+    border-top: 1px solid var(--line);
+    color: var(--ink);
+    font-size: 12px;
+    text-align: left;
+  }
+  .mobile-track-mute[aria-pressed="true"] {
+    color: var(--orange);
   }
   .editor-heading {
     min-height: 64px;

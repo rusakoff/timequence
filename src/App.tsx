@@ -682,6 +682,12 @@ export default function App() {
         ),
       });
   };
+  const toggleTrackMuted = (track: Track) => {
+    const muted = !track.muted;
+    if (track.tickEvery)
+      engine.current.setTickMuted({ ...track, muted });
+    updateTrack(track.id, { muted });
+  };
   const updateEvent = (change: Partial<SoundEvent>) => {
     if (selectedTrack && selectedEvent)
       updateTrack(selectedTrack.id, {
@@ -1584,15 +1590,7 @@ export default function App() {
                                   disabled={
                                     busy || (playing && !track.tickEvery)
                                   }
-                                  onClick={() => {
-                                    const muted = !track.muted;
-                                    if (track.tickEvery)
-                                      engine.current.setTickMuted({
-                                        ...track,
-                                        muted,
-                                      });
-                                    updateTrack(track.id, { muted });
-                                  }}
+                                  onClick={() => toggleTrackMuted(track)}
                                 >
                                   {track.muted ? (
                                     <VolumeX size={15} />
@@ -1888,6 +1886,16 @@ export default function App() {
                             />
                           </div>
                         </div>
+                        <button
+                          className="mobile-track-mute"
+                          type="button"
+                          aria-pressed={selectedTrack.muted}
+                          disabled={busy || (playing && !selectedTrack.tickEvery)}
+                          onClick={() => toggleTrackMuted(selectedTrack)}
+                        >
+                          {selectedTrack.muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
+                          {selectedTrack.muted ? "Включить дорожку" : "Выключить дорожку"}
+                        </button>
                         <button
                           className="delete-track-button"
                           disabled={locked}
