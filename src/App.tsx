@@ -904,22 +904,25 @@ export default function App() {
   }
   useEffect(() => {
     const listener = (e: KeyboardEvent) => {
-      if (
-        modal ||
-        (e.target instanceof HTMLElement &&
-          e.target.closest("input,select,textarea,[contenteditable]"))
-      )
-        return;
+      const target = e.target instanceof Element ? e.target : null;
+      const inForm = !!target?.closest(
+        "form,input,select,textarea,[contenteditable]:not([contenteditable='false']),[role='textbox']",
+      );
       if (
         e.code === "Space" &&
-        !(
-          e.target instanceof HTMLElement &&
-          e.target.closest("button,[role=button]")
-        )
+        !inForm &&
+        !e.isComposing &&
+        !e.altKey &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.shiftKey
       ) {
         e.preventDefault();
-        void togglePlay();
+        e.stopPropagation();
+        if (!e.repeat) void togglePlay();
+        return;
       }
+      if (modal || inForm) return;
       if ((e.metaKey || e.ctrlKey) && e.code === "KeyZ") {
         e.preventDefault();
         if (e.shiftKey) redo();
@@ -934,8 +937,8 @@ export default function App() {
       }
       if (e.key === "Escape") closeInspector();
     };
-    window.addEventListener("keydown", listener);
-    return () => window.removeEventListener("keydown", listener);
+    window.addEventListener("keydown", listener, true);
+    return () => window.removeEventListener("keydown", listener, true);
   });
 
   function addEvent(track: Track, at: number) {
@@ -1134,7 +1137,7 @@ export default function App() {
         }}
         onKeyDown={(e) => {
           if (locked) return;
-          if (e.key === "Enter" || e.key === " ") {
+          if (e.key === "Enter") {
             e.preventDefault();
             setSelection({ track: track.id, event: ev.id });
           }

@@ -67,18 +67,7 @@ export function ZenMode({
         : "Завершение";
 
   return (
-    <div
-      className="zen-mode"
-      onKeyDown={(event) => {
-        if (
-          event.code === "Space" &&
-          !(event.target as HTMLElement).closest("button")
-        ) {
-          event.preventDefault();
-          if (!busy) onPlay();
-        }
-      }}
-    >
+    <div className="zen-mode">
       <header className="zen-header">
         <span>Дзен-режим</span>
         <span className="zen-timer-name">{timer.name}</span>
