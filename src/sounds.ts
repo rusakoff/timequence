@@ -112,11 +112,13 @@ const recordings: {
   },
 ];
 
+const publicBase = import.meta.env?.BASE_URL ?? "/";
+
 export const sounds: SoundDefinition[] = [
   ...recordings.map((sound): SoundDefinition => ({
     ...sound,
     kind: "sample",
-    file: `/audio/vcsl/${sound.id}.mp3?v=short-3s`,
+    file: `${publicBase}audio/vcsl/${sound.id}.mp3?v=short-3s`,
     ...sampleMetadata[sound.id],
   })),
   {

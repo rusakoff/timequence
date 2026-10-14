@@ -2418,7 +2418,7 @@ export default function App() {
               </a>{" "}
               ·{" "}
               <a
-                href="/audio/vcsl/LICENSE.txt"
+                href={`${import.meta.env.BASE_URL}audio/vcsl/LICENSE.txt`}
                 target="_blank"
                 rel="noreferrer"
               >
