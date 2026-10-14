@@ -156,10 +156,7 @@ function TimerList({
               <strong title={t.name}>{t.name}</strong>
             </span>
             <TrackIcons tracks={enabledTracks} />
-            <span className="timer-card-duration">
-              <TimerIcon size={12} aria-hidden="true" />
-              {time(t.duration)}
-            </span>
+            <span className="timer-card-duration">{time(t.duration)}</span>
           </button>
         );
       })}

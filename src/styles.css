@@ -444,10 +444,15 @@ input[type="range"]:disabled {
 }
 .timer-card {
   position: relative;
-  display: block;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: 17px 16px;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 5px;
   width: 100%;
-  min-height: 0;
-  padding: 5px 10px;
+  min-height: 56px;
+  padding: 8px 10px;
   text-align: left;
   border: 1px solid transparent;
   border-radius: var(--radius);
@@ -466,6 +471,8 @@ input[type="range"]:disabled {
 }
 .timer-card-top {
   display: block;
+  grid-column: 1 / -1;
+  min-width: 0;
 }
 .timer-card-top strong {
   font-size: 13px;
@@ -476,20 +483,21 @@ input[type="range"]:disabled {
   white-space: nowrap;
 }
 .timer-card-duration {
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  grid-column: 2;
+  grid-row: 2;
   font-size: 11px;
-  line-height: 14px;
+  line-height: 16px;
   color: var(--muted);
-  margin-top: 2px;
+  white-space: nowrap;
 }
 .timer-track-icons {
   display: flex;
+  grid-column: 1;
+  grid-row: 2;
   align-items: center;
   gap: 4px;
   height: 16px;
-  margin-top: 2px;
+  min-width: 0;
 }
 .timer-track-icon,
 .timer-track-more {
