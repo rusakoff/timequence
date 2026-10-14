@@ -131,6 +131,9 @@ function TimerList({
         timer.name.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru")),
       )
     : timers;
+  const orderedTimers = [...visibleTimers].sort(
+    (a, b) => Number(b.name === "Дыхание 4–7–8") - Number(a.name === "Дыхание 4–7–8"),
+  );
   return (
     <div className="timer-list" role="navigation" aria-label="Список таймеров">
       {searchable && (
@@ -145,7 +148,7 @@ function TimerList({
           />
         </label>
       )}
-      {visibleTimers.map((t) => {
+      {orderedTimers.map((t) => {
         const enabledTracks = t.tracks.filter((track) => !track.muted);
         return (
           <button
