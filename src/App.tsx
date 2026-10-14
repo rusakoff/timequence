@@ -82,6 +82,7 @@ const SOUND_ICONS = {
 };
 const SOUND_PULSE_SECONDS = 0.42;
 const MOBILE_CELL_PITCH = 64;
+const DEFAULT_TIMER_NAME = "Дыхание 4–7–8";
 type Selection = { track: string; event?: string } | null;
 type Drag = {
   track: string;
@@ -114,6 +115,8 @@ const parseClock = (value: string): number | null => {
   if (!match || Number(match[2]) > 59) return null;
   return Number(match[1]) * 60 + Number(match[2]);
 };
+const defaultTimer = (timers: Timer[]) =>
+  timers.find((timer) => timer.name === DEFAULT_TIMER_NAME) ?? timers[0];
 
 function TimerList({
   timers,
@@ -132,7 +135,7 @@ function TimerList({
       )
     : timers;
   const orderedTimers = [...visibleTimers].sort(
-    (a, b) => Number(b.name === "Дыхание 4–7–8") - Number(a.name === "Дыхание 4–7–8"),
+    (a, b) => Number(b.name === DEFAULT_TIMER_NAME) - Number(a.name === DEFAULT_TIMER_NAME),
   );
   return (
     <div className="timer-list" role="navigation" aria-label="Список таймеров">
@@ -427,8 +430,8 @@ export default function App() {
     }
     return initialTimers();
   });
-  const [activeId, setActiveId] = useState(() => timers[0]?.id ?? "");
-  const timer = timers.find((t) => t.id === activeId) ?? timers[0];
+  const [activeId, setActiveId] = useState(() => defaultTimer(timers)?.id ?? "");
+  const timer = timers.find((t) => t.id === activeId) ?? defaultTimer(timers);
   const [selection, setSelected] = useState<Selection>(null);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   function setSelection(next: Selection) {
@@ -2558,7 +2561,7 @@ export default function App() {
               onClick={() => {
                 const next = timers.filter((t) => t.id !== timer.id);
                 commit(next);
-                setActiveId(next[0]?.id ?? "");
+                setActiveId(defaultTimer(next)?.id ?? "");
                 setSelection(null);
                 stop(true);
                 closeModal();
