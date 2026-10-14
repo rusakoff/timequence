@@ -313,26 +313,23 @@ test("synthesized cues also play once and resume without another attack", async 
   assert.ok(Math.abs(source.stops[0] - 0.41) < 1e-10);
 });
 
-test("stopwatch tracks loop precisely at 1 and 5 seconds using only two sources for an hour", async () => {
+test("one-second stopwatch loops precisely using one source for an hour", async () => {
   const timer = {
     ...makeTimer(),
     duration: 3600,
-    tracks: [makeTickTrack(1), makeTickTrack(5)],
+    tracks: [makeTickTrack(1)],
   };
   const engine = new AudioEngine();
   await engine.start(timer, 0, 65);
   const sources = context(engine).buffers;
-  assert.equal(sources.length, 2);
+  assert.equal(sources.length, 1);
   assert.deepEqual(
     sources.map((s) => s.buffer!.duration),
-    [1, 5],
+    [1],
   );
   assert.deepEqual(
     sources.map((s) => s.starts[0]),
-    [
-      [1.06, 0],
-      [5.06, 0],
-    ],
+    [[1.06, 0]],
   );
   assert.ok(sources.every((s) => s.loop && s.stops[0] === 3600.06));
   engine.stop();
@@ -340,27 +337,24 @@ test("stopwatch tracks loop precisely at 1 and 5 seconds using only two sources 
   assert.ok(sources.every((s) => s.disconnected));
 });
 
-test("stopwatch mute and unmute work during playback without resetting position or other tracks", async () => {
-  const one = makeTickTrack(1),
-    five = { ...makeTickTrack(5), muted: true };
-  const timer = { ...makeTimer(), duration: 20, tracks: [one, five] };
+test("stopwatch mute and unmute work during playback without resetting position", async () => {
+  const one = makeTickTrack(1);
+  const timer = { ...makeTimer(), duration: 20, tracks: [one] };
   const engine = new AudioEngine();
   await engine.start(timer, 0, 65);
   const ctx = context(engine),
     sources = ctx.buffers;
-  const [oneGain, fiveGain] = sources.map((s) => s.connections[0]);
+  const oneGain = sources[0].connections[0];
   assert.equal(oneGain.gain.value, 0.28);
-  assert.equal(fiveGain.gain.value, 0);
   ctx.currentTime = 3;
   const position = engine.position;
   engine.setTickMuted({ ...one, muted: true });
   assert.equal(oneGain.gain.value, 0);
-  assert.equal(fiveGain.gain.value, 0);
-  engine.setTickMuted({ ...five, muted: false });
-  assert.equal(fiveGain.gain.value, 0.38);
+  engine.setTickMuted({ ...one, muted: false });
+  assert.equal(oneGain.gain.value, 0.28);
   assert.equal(engine.position, position);
   assert.equal(engine.running, true);
-  assert.equal(ctx.buffers.length, 2);
+  assert.equal(ctx.buffers.length, 1);
   engine.stop();
 });
 
@@ -369,24 +363,19 @@ test("stopwatch resumes on the original second boundaries and resets its phase o
     ...makeTimer(),
     duration: 20,
     step: 10,
-    tracks: [makeTickTrack(1), makeTickTrack(5)],
+    tracks: [makeTickTrack(1)],
   };
   const engine = new AudioEngine();
   await engine.start(timer, 7.3, 65);
   const sources = context(engine).buffers;
   assert.ok(Math.abs(sources[0].starts[0][1] - 0.3) < 1e-9);
-  assert.ok(Math.abs(sources[1].starts[0][1] - 2.3) < 1e-9);
   assert.equal(sources[0].starts[0][0], engine.startedAt);
-  assert.equal(sources[1].starts[0][0], engine.startedAt);
   await engine.start(timer, 0, 65);
   assert.deepEqual(
     context(engine)
-      .buffers.slice(-2)
+      .buffers.slice(-1)
       .map((s) => s.starts[0]),
-    [
-      [1.06, 0],
-      [5.06, 0],
-    ],
+    [[1.06, 0]],
   );
   await engine.start({ ...timer, duration: 1 }, 0, 65);
   assert.equal(engine.sources.size, 0);

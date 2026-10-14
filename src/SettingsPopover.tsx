@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 type Props = {
   children: ReactNode;
+  ariaLabel: string;
   anchorKey: string;
   getAnchor: () => HTMLElement | null;
   suspended: boolean;
@@ -12,6 +13,7 @@ type Props = {
 /** Non-modal editor anchored to a cue. Suspends behind the sound library. */
 export function SettingsPopover({
   children,
+  ariaLabel,
   anchorKey,
   getAnchor,
   suspended,
@@ -66,10 +68,23 @@ export function SettingsPopover({
         viewportBottom,
         Math.max(topBound + 100, transportTop - 8),
       );
-      const width = Math.min(304, rightBound - leftBound);
+      const mobile = window.matchMedia("(max-width: 700px)").matches;
+      const width = Math.min(mobile ? 360 : 304, rightBound - leftBound);
       popup.style.width = `${width}px`;
       const naturalHeight = card.scrollHeight + 2;
       const height = Math.min(naturalHeight, bottomBound - topBound);
+      if (mobile) {
+        popup.style.left = `${leftBound + (rightBound - leftBound - width) / 2}px`;
+        popup.style.top = `${bottomBound - height}px`;
+        popup.style.setProperty("--popover-height", `${height}px`);
+        popup.dataset.side = "sheet";
+        popup.style.visibility = "visible";
+        if (needsFocus) {
+          needsFocus = false;
+          popup.focus({ preventScroll: true });
+        }
+        return;
+      }
       const x =
         Math.max(canvasLeft, rect.left) +
         (Math.min(rect.right, stageRect?.right ?? rect.right) -
@@ -120,11 +135,7 @@ export function SettingsPopover({
       popup.style.visibility = "visible";
       if (needsFocus) {
         needsFocus = false;
-        if (!(
-          document.activeElement instanceof HTMLInputElement &&
-          document.activeElement.classList.contains("track-name-input")
-        ))
-          popup.focus({ preventScroll: true });
+        popup.focus({ preventScroll: true });
       }
     };
     const schedule = () => {
@@ -142,7 +153,7 @@ export function SettingsPopover({
       // A different cue/grid cell opens its own editor in the same click.
       if (
         target.closest(
-          ".sound-event,.grid-cell,.track-icon-button,.track-name-button,.track-name-input,[aria-controls='sound-properties']",
+          ".sound-event,.grid-cell,.tick-ruler,.track-select,[aria-controls='sound-properties']",
         )
       )
         return;
@@ -178,7 +189,7 @@ export function SettingsPopover({
       id="sound-properties"
       className="settings-popover"
       role="dialog"
-      aria-label="Настройки выбранного звука"
+      aria-label={ariaLabel}
       tabIndex={-1}
       hidden={suspended}
       onKeyDown={(event) => {

@@ -12,7 +12,7 @@ export interface Track {
   volume: number;
   muted: boolean;
   events: SoundEvent[];
-  tickEvery?: 1 | 5;
+  tickEvery?: 1 | 5; // 5 is accepted only while reading legacy snapshots.
 }
 export interface Timer {
   id: string;
@@ -46,22 +46,11 @@ export function inferStep(timer: Pick<Timer, "duration" | "tracks">): number {
   return 1;
 }
 
-/** Keep cell indices and IDs, changing only the time each cell represents. */
+/** Change the editor grid without changing playback time or cue positions. */
 export function changeTimerStep(timer: Timer, step: number): Timer {
-  const steps = timer.duration / timer.step;
-  if (!Number.isInteger(step) || step < 1 || steps * step > 3600) return timer;
-  return {
-    ...timer,
-    step,
-    duration: steps * step,
-    tracks: timer.tracks.map((track) => ({
-      ...track,
-      events: track.events.map((event) => ({
-        ...event,
-        at: (event.at / timer.step) * step,
-      })),
-    })),
-  };
+  if (!Number.isInteger(step) || step < 1 || step > timer.duration)
+    return timer;
+  return step === timer.step ? timer : { ...timer, step };
 }
 export const time = (seconds: number) =>
   `${String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, "0")}:${String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, "0")}`;
@@ -111,6 +100,7 @@ export function resizeTimer(timer: Timer, duration: number): Timer {
   return {
     ...timer,
     duration,
+    step: timer.step <= duration ? timer.step : 1,
     tracks: timer.tracks.map((t) => ({
       ...t,
       events: t.events.filter((e) => e.at < duration),
@@ -130,24 +120,28 @@ export const makeTrack = (sound: SoundId): Track => {
   };
 };
 
-export function makeTickTrack(every: 1 | 5): Track {
+export function makeTickTrack(every: 1): Track {
   return {
-    ...makeTrack(every === 1 ? "tick" : "tick-accent"),
-    name: `Тик · ${every} с`,
-    color: every === 1 ? "ink" : "sand",
-    volume: every === 1 ? 28 : 38,
+    ...makeTrack("tick"),
+    name: "Тик · 1 с",
+    color: "ink",
+    volume: 28,
     tickEvery: every,
   };
 }
 
+/** Retire the five-second clock without changing any user tracks or the one-second clock. */
+export function withoutFiveSecondTicks(timer: Timer): Timer {
+  const tracks = timer.tracks.filter((track) => track.tickEvery !== 5);
+  return tracks.length === timer.tracks.length ? timer : { ...timer, tracks };
+}
+
 /** Fixed-second ticks are independent of the editable step pattern. */
 export function withTickTracks(timer: Timer): Timer {
-  const missing = ([1, 5] as const).filter(
-    (every) => !timer.tracks.some((t) => t.tickEvery === every),
-  );
-  return missing.length
-    ? { ...timer, tracks: [...timer.tracks, ...missing.map(makeTickTrack)] }
-    : timer;
+  const current = withoutFiveSecondTicks(timer);
+  return current.tracks.some((track) => track.tickEvery === 1)
+    ? current
+    : { ...current, tracks: [...current.tracks, makeTickTrack(1)] };
 }
 
 export const makeTimer = (name = "Новый таймер"): Timer => ({
@@ -156,7 +150,7 @@ export const makeTimer = (name = "Новый таймер"): Timer => ({
   duration: 300,
   step: DEFAULT_STEP,
   loop: false,
-  tracks: [makeTrack("nepal-bell"), makeTickTrack(1), makeTickTrack(5)],
+  tracks: [makeTrack("nepal-bell"), makeTickTrack(1)],
 });
 export function validTimers(value: unknown): value is Timer[] {
   if (!Array.isArray(value) || value.length > 100) return false;

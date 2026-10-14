@@ -1,4 +1,9 @@
-import { restoreTimers, withTickTracks, type Timer } from "./model.ts";
+import {
+  restoreTimers,
+  withTickTracks,
+  withoutFiveSecondTicks,
+  type Timer,
+} from "./model.ts";
 import {
   initialTimers,
   addNewExamples,
@@ -6,8 +11,9 @@ import {
   upgradeDefaultTimers,
 } from "./examples.ts";
 
-export const STORAGE = "timequence.timers.v9";
+export const STORAGE = "timequence.timers.v10";
 const LEGACY_STORAGE = [
+  "timequence.timers.v9",
   "timequence.timers.v8",
   "timequence.timers.v7",
   "timequence.timers.v6",
@@ -18,7 +24,7 @@ const LEGACY_STORAGE = [
   "timequence.timers.v1",
 ];
 
-/** The app writes only v9, so previous libraries remain untouched backups. */
+/** The app writes only v10, so previous libraries remain untouched backups. */
 export function loadTimers(read: (key: string) => string | null): Timer[] {
   for (const key of [STORAGE, ...LEGACY_STORAGE]) {
     const raw = read(key);
@@ -26,10 +32,13 @@ export function loadTimers(read: (key: string) => string | null): Timer[] {
     try {
       const parsed = JSON.parse(raw);
       const versioned =
-        [5, 6, 7, 8, 9].includes(parsed?.version) && !Array.isArray(parsed);
+        [5, 6, 7, 8, 9, 10].includes(parsed?.version) && !Array.isArray(parsed);
       const timers = restoreTimers(versioned ? parsed.timers : parsed);
       if (timers) {
-        if (key === STORAGE && parsed?.version === 9) return timers;
+        if (key === STORAGE && parsed?.version === 10)
+          return timers.map(withoutFiveSecondTicks);
+        if (key === "timequence.timers.v9")
+          return timers.map(withoutFiveSecondTicks);
         if (key === "timequence.timers.v5" || key === "timequence.timers.v6")
           return addNewExamples(removeRetiredExamples(timers)).map(
             withTickTracks,
@@ -47,5 +56,5 @@ export function loadTimers(read: (key: string) => string | null): Timer[] {
 }
 
 export function serializeTimers(timers: Timer[]): string {
-  return JSON.stringify({ version: 9, timers });
+  return JSON.stringify({ version: 10, timers: timers.map(withoutFiveSecondTicks) });
 }

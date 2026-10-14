@@ -36,7 +36,8 @@ export function ZenMode({
   onRestart,
   onMute,
 }: Props) {
-  const [fullscreen, setFullscreen] = useState(!!document.fullscreenElement);
+  const zenRef = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const ownsFullscreen = useRef(false);
   const [screenError, setScreenError] = useState("");
   const moments = useMemo(() => cueMoments(timer), [timer]);
@@ -72,22 +73,26 @@ export function ZenMode({
         : "Завершение";
 
   useEffect(() => {
-    const update = () => setFullscreen(!!document.fullscreenElement);
+    const zen = zenRef.current;
+    const update = () => setFullscreen(document.fullscreenElement === zen);
+    update();
     document.addEventListener("fullscreenchange", update);
     return () => {
       document.removeEventListener("fullscreenchange", update);
-      if (ownsFullscreen.current && document.fullscreenElement)
+      if (ownsFullscreen.current && document.fullscreenElement === zen)
         void document.exitFullscreen().catch(() => {});
     };
   }, []);
 
   async function toggleFullscreen() {
     setScreenError("");
+    const zen = zenRef.current;
+    if (!zen) return;
     try {
       if (fullscreen) await document.exitFullscreen();
       else {
+        await zen.requestFullscreen();
         ownsFullscreen.current = true;
-        await document.documentElement.requestFullscreen();
       }
     } catch {
       setScreenError(
@@ -98,6 +103,7 @@ export function ZenMode({
 
   return (
     <div
+      ref={zenRef}
       className="zen-mode"
       onKeyDown={(event) => {
         if (

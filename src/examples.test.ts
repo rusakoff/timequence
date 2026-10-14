@@ -133,7 +133,7 @@ test("upgrade respects capacity and does not duplicate the new examples", () => 
   assert.deepEqual(upgradeDefaultTimers(current), current);
 });
 
-test("v9 preserves edits, empty libraries and deliberate deletion of examples", () => {
+test("v10 preserves edits, empty libraries and deliberate deletion of examples", () => {
   for (const timers of [[], initialTimers().slice(1), [makeTimer("Свой")]]) {
     const storage = new Map([
       [STORAGE, serializeTimers(timers)],

@@ -17,22 +17,20 @@ import {
   type SoundEvent,
 } from "./model.ts";
 
-test("changing step scales time while preserving cell positions, IDs and cue data", () => {
+test("changing grid step preserves timer duration and cue times", () => {
   const timer = initialTimers()[0];
   const changed = changeTimerStep(timer, 60);
-  assert.equal(changed.duration, timer.duration * 2);
+  assert.equal(changed.step, 60);
+  assert.equal(changed.duration, timer.duration);
   for (const [i, track] of changed.tracks.entries()) {
     assert.equal(track.id, timer.tracks[i].id);
     for (const [j, event] of track.events.entries()) {
       assert.equal(event.id, timer.tracks[i].events[j].id);
-      assert.equal(
-        event.at / changed.step,
-        timer.tracks[i].events[j].at / timer.step,
-      );
+      assert.equal(event.at, timer.tracks[i].events[j].at);
     }
   }
   assert.deepEqual(changeTimerStep(changed, timer.step), timer);
-  for (const step of [0, -1, NaN, Infinity, 0.5, 201])
+  for (const step of [0, -1, NaN, Infinity, 0.5, timer.duration + 1])
     assert.equal(changeTimerStep(timer, step), timer);
 });
 test("cue positions stay within the timer and snap to whole seconds", () => {
@@ -61,6 +59,7 @@ test("shortening a timer removes cues beyond its end without changing others", (
   assert.equal(shorter.tracks[0].events.length, 1);
   assert.deepEqual(shorter.tracks[0].events[0], { id: "a", at: 30 });
   assert.equal(timer.tracks[0].events.length, 2);
+  assert.equal(resizeTimer(timer, 18).step, 1);
 });
 test("saved data validates supported sounds, duration, volume and bounds", () => {
   const examples = initialTimers();
