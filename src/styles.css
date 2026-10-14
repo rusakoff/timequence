@@ -987,38 +987,11 @@ h1 {
   --event-fill: var(--cue-color);
   color: #fff;
 }
-.cue-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.cue-mark i {
-  width: 2px;
-  height: 14px;
-  border-radius: 1px;
-  background: currentColor;
-  opacity: 0.85;
-}
 .cue-count {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 4px;
-  border-radius: 9px;
-  background: #ffffffd9;
-  color: var(--cue-label);
-  font-size: 10px;
-  font-weight: 750;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
-}
-.sound-event.compact .cue-mark i {
-  width: 1px;
-  height: 10px;
 }
 .sound-event.selected {
   background-color: color-mix(in srgb, var(--event-fill) 85%, black);

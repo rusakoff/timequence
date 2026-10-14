@@ -1169,9 +1169,6 @@ export default function App() {
           }
         }}
       >
-        <span className="cue-mark" aria-hidden="true">
-          <i />
-        </span>
         {groupedEvents.length > 1 && (
           <span className="cue-count" aria-hidden="true">{groupedEvents.length}</span>
         )}
