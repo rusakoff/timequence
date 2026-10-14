@@ -18,7 +18,6 @@ import {
   Copy,
   Expand,
   Headphones,
-  Leaf,
   LoaderCircle,
   MoreHorizontal,
   Pause,
@@ -2155,7 +2154,7 @@ export default function App() {
                     disabled={busy}
                     onClick={() => playInMode("zen")}
                   >
-                    <Leaf size={18} />
+                    <Expand size={18} />
                     <span>Дзен</span>
                   </button>
                   <button
@@ -2170,7 +2169,7 @@ export default function App() {
                     disabled={busy}
                     onClick={() => playInMode("focus")}
                   >
-                    <Expand size={18} />
+                    <TimerIcon size={18} />
                     <span>Таймер</span>
                   </button>
                 </div>
