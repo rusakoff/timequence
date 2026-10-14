@@ -13,23 +13,38 @@ import {
   restoreTimers,
   snapToStep,
   changeTimerStep,
+  stepChangeCoincidences,
+  stepChangeMoves,
   inferStep,
   type SoundEvent,
 } from "./model.ts";
 
-test("changing grid step preserves timer duration and cue times", () => {
-  const timer = initialTimers()[0];
-  const changed = changeTimerStep(timer, 60);
-  assert.equal(changed.step, 60);
+test("changing grid step previews and moves only off-grid cues", () => {
+  const timer = makeTimer();
+  timer.duration = 76;
+  timer.step = 1;
+  timer.tracks[0].events = [
+    { id: "exact", at: 10 },
+    { id: "between", at: 13 },
+    { id: "last", at: 75 },
+  ];
+  const moves = stepChangeMoves(timer, 10);
+  assert.equal(stepChangeCoincidences(timer, 10), 1);
+  assert.deepEqual(moves.map(({ eventId, from, to }) => ({ eventId, from, to })), [
+    { eventId: "between", from: 13, to: 10 },
+    { eventId: "last", from: 75, to: 70 },
+  ]);
+  const changed = changeTimerStep(timer, 10);
+  assert.equal(changed.step, 10);
   assert.equal(changed.duration, timer.duration);
-  for (const [i, track] of changed.tracks.entries()) {
-    assert.equal(track.id, timer.tracks[i].id);
-    for (const [j, event] of track.events.entries()) {
-      assert.equal(event.id, timer.tracks[i].events[j].id);
-      assert.equal(event.at, timer.tracks[i].events[j].at);
-    }
-  }
-  assert.deepEqual(changeTimerStep(changed, timer.step), timer);
+  assert.deepEqual(changed.tracks[0].events.map((event) => [event.id, event.at]), [
+    ["exact", 10], ["between", 10], ["last", 70],
+  ]);
+  assert.deepEqual(timer.tracks[0].events.map((event) => event.at), [10, 13, 75]);
+  assert.equal(changed.tracks[1], timer.tracks[1]);
+  assert.deepEqual(stepChangeMoves(changed, 5), []);
+  assert.equal(stepChangeCoincidences(changed, 5), 0);
+  assert.deepEqual(changeTimerStep(changed, 5).tracks[0].events, changed.tracks[0].events);
   for (const step of [0, -1, NaN, Infinity, 0.5, timer.duration + 1])
     assert.equal(changeTimerStep(timer, step), timer);
 });

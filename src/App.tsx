@@ -53,6 +53,8 @@ import {
   CELL_PITCH,
   DEFAULT_STEP,
   changeTimerStep,
+  stepChangeCoincidences,
+  stepChangeMoves,
   snapToStep,
   makeTimer,
   makeTrack,
@@ -430,6 +432,7 @@ export default function App() {
     setInspectorOpen(!!next);
   }
   const [modal, setModal] = useState<Modal>(null);
+  const [pendingStep, setPendingStep] = useState<{ timerId: string; step: number } | null>(null);
   const [soundChoice, setSoundChoice] = useState<SoundId>("nepal-bell");
   const [soundGroup, setSoundGroup] = useState<"sample" | "synth">("sample");
   const [previewState, setPreviewState] = useState<{
@@ -481,6 +484,12 @@ export default function App() {
   }, []);
   const cellPitch = mobileGrid ? MOBILE_CELL_PITCH : CELL_PITCH;
   const gridStep = timer?.step ?? DEFAULT_STEP;
+  const pendingMoves = timer && pendingStep?.timerId === timer.id
+    ? stepChangeMoves(timer, pendingStep.step)
+    : [];
+  const pendingCoincidences = timer && pendingStep?.timerId === timer.id
+    ? stepChangeCoincidences(timer, pendingStep.step)
+    : 0;
   const pixelsPerSecond = cellPitch / gridStep;
   // Start at the first cell; scroll only once the playhead reaches the center.
   const playheadCenter = Math.max(0, (viewport.width - viewport.label) / 2);
@@ -556,6 +565,10 @@ export default function App() {
     if (!timer || locked || drag) return;
     const next = changeTimerStep(timer, value);
     if (next === timer || next.step === timer.step) return;
+    if (stepChangeMoves(timer, value).length) {
+      setPendingStep({ timerId: timer.id, step: value });
+      return;
+    }
     updateTimer(next);
   }
   const selectedTrack = timer?.tracks.find((t) => t.id === selection?.track);
@@ -1338,6 +1351,7 @@ export default function App() {
                                 return;
                               }
                               changeStep(n);
+                              e.currentTarget.value = String(timer.step);
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") e.currentTarget.blur();
@@ -1346,7 +1360,7 @@ export default function App() {
                                 e.currentTarget.blur();
                               }
                             }}
-                            title="Интервал между делениями сетки. Время таймера и сигналы не меняются."
+                            title="Интервал между делениями сетки. Сигналы вне новой сетки сдвинутся после подтверждения."
                           />
                           <span>с</span>
                         </span>
@@ -2209,6 +2223,51 @@ export default function App() {
             >
               <Trash2 size={18} />
               Удалить таймер
+            </button>
+          </div>
+        </Dialog>
+      )}
+      {pendingStep && timer?.id === pendingStep.timerId && pendingMoves.length > 0 && (
+        <Dialog
+          label="Подтвердить изменение шага сетки"
+          className="step-change-dialog"
+          close={() => setPendingStep(null)}
+        >
+          <h2>Сдвинуть сигналы на новую сетку?</h2>
+          <p className="muted">
+            При шаге {pendingStep.step} с {countLabel(pendingMoves.length, ["сигнал", "сигнала", "сигналов"])}
+            {pendingMoves.length === 1 ? " не попадает" : " не попадают"} точно в клетку. Эти сигналы переместятся к ближайшей клетке,
+            и время их воспроизведения изменится.
+          </p>
+          <div className="step-change-preview" aria-label="Примеры нового времени сигналов">
+            {pendingMoves.slice(0, 2).map((move) => (
+              <div key={`${move.trackId}:${move.eventId}`}>
+                <span title={move.trackName}>{move.trackName}</span>
+                <del>{time(move.from)}</del>
+                <ArrowRight size={14} aria-hidden="true" />
+                <strong>{time(move.to)}</strong>
+              </div>
+            ))}
+            {pendingMoves.length > 2 && <small>И ещё {pendingMoves.length - 2}</small>}
+          </div>
+          {pendingCoincidences > 0 && (
+            <p className="step-change-note">
+              Некоторые сигналы одной дорожки совпадут по времени и прозвучат одновременно.
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button className="btn secondary" onClick={() => setPendingStep(null)}>
+              Оставить шаг {timer.step} с
+            </button>
+            <button
+              className="btn primary"
+              disabled={locked || !!drag}
+              onClick={() => {
+                updateTimer(changeTimerStep(timer, pendingStep.step));
+                setPendingStep(null);
+              }}
+            >
+              Сдвинуть и изменить
             </button>
           </div>
         </Dialog>

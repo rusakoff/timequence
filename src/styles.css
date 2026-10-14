@@ -1636,6 +1636,54 @@ h1 {
   gap: 10px;
   margin-top: 26px;
 }
+.step-change-preview {
+  margin-top: 18px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--paper);
+}
+.step-change-preview > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 14px auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  font-size: 13px;
+}
+.step-change-preview > div + div {
+  border-top: 1px solid var(--line);
+}
+.step-change-preview > div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.step-change-preview del,
+.step-change-preview svg,
+.step-change-preview small {
+  color: var(--muted);
+}
+.step-change-preview strong {
+  font-variant-numeric: tabular-nums;
+}
+.step-change-preview small {
+  display: block;
+  padding: 8px 0 4px;
+}
+.step-change-note {
+  margin-top: 14px;
+  color: #8c3d1f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+@media (max-width: 380px) {
+  .step-change-dialog .dialog-actions {
+    flex-direction: column-reverse;
+  }
+  .step-change-dialog .dialog-actions .btn {
+    width: 100%;
+  }
+}
 .inline-warning,
 .storage-error {
   font-size: 12px;

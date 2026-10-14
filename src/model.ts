@@ -46,11 +46,66 @@ export function inferStep(timer: Pick<Timer, "duration" | "tracks">): number {
   return 1;
 }
 
-/** Change the editor grid without changing playback time or cue positions. */
+export interface StepChangeMove {
+  trackId: string;
+  trackName: string;
+  eventId: string;
+  from: number;
+  to: number;
+}
+
+/** Preview every cue whose playback time will move to the nearest valid cell. */
+export function stepChangeMoves(timer: Timer, step: number): StepChangeMove[] {
+  if (!Number.isInteger(step) || step < 1 || step > timer.duration || step === timer.step)
+    return [];
+  return timer.tracks.flatMap((track) =>
+    track.tickEvery
+      ? []
+      : track.events.flatMap((event) => {
+          const to = moveEvent(event, event.at, timer.duration, step).at;
+          return to === event.at
+            ? []
+            : [{ trackId: track.id, trackName: track.name, eventId: event.id, from: event.at, to }];
+        }),
+  );
+}
+
+/** Count cells where previously separate cues on one track would play together. */
+export function stepChangeCoincidences(timer: Timer, step: number): number {
+  if (!Number.isInteger(step) || step < 1 || step > timer.duration || step === timer.step)
+    return 0;
+  return timer.tracks.reduce((count, track) => {
+    if (track.tickEvery) return count;
+    const originalTimesByCell = new Map<number, Set<number>>();
+    for (const event of track.events) {
+      const to = moveEvent(event, event.at, timer.duration, step).at;
+      const originalTimes = originalTimesByCell.get(to) ?? new Set<number>();
+      originalTimes.add(event.at);
+      originalTimesByCell.set(to, originalTimes);
+    }
+    return count + [...originalTimesByCell.values()].filter((times) => times.size > 1).length;
+  }, 0);
+}
+
+/** Align cue playback times with the new grid while preserving their IDs. */
 export function changeTimerStep(timer: Timer, step: number): Timer {
   if (!Number.isInteger(step) || step < 1 || step > timer.duration)
     return timer;
-  return step === timer.step ? timer : { ...timer, step };
+  if (step === timer.step) return timer;
+  return {
+    ...timer,
+    step,
+    tracks: timer.tracks.map((track) =>
+      track.tickEvery
+        ? track
+        : {
+            ...track,
+            events: track.events.map((event) =>
+              moveEvent(event, event.at, timer.duration, step),
+            ),
+          },
+    ),
+  };
 }
 export const time = (seconds: number) =>
   `${String(Math.floor(Math.max(0, seconds) / 60)).padStart(2, "0")}:${String(Math.floor(Math.max(0, seconds) % 60)).padStart(2, "0")}`;
