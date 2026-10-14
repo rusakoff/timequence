@@ -147,12 +147,13 @@ function TimerList({
           className={`timer-card ${t.id === activeId ? "current" : ""}`}
           key={t.id}
           aria-current={t.id === activeId ? "page" : undefined}
+          aria-label={`${t.name}, ${time(t.duration)}, ${t.tracks.length ? `дорожки: ${t.tracks.map((track) => track.name).join(", ")}` : "без дорожек"}`}
           onClick={() => select(t.id)}
         >
           <span className="timer-card-top">
             <strong title={t.name}>{t.name}</strong>
           </span>
-          <MiniSequence timer={t} />
+          <TrackIcons timer={t} />
           <span className="timer-card-duration">
             <TimerIcon size={12} aria-hidden="true" />
             {time(t.duration)}
@@ -218,25 +219,24 @@ function TrackNameField({
   );
 }
 
-function MiniSequence({ timer }: { timer: Timer }) {
+function TrackIcons({ timer }: { timer: Timer }) {
+  const shown = timer.tracks.length <= 5 ? timer.tracks : timer.tracks.slice(0, 4);
   return (
-    <span className="mini-sequence" aria-hidden="true">
-      {timer.tracks
-        .filter((t) => !t.tickEvery)
-        .slice(0, 3)
-        .map((t) => (
-          <span key={t.id} className={`color-${t.color}`}>
-            {t.events.slice(0, 14).map((e) => (
-              <i
-                key={e.id}
-                style={{
-                  left: `${(e.at / timer.duration) * 95}%`,
-                  width: "3px",
-                }}
-              />
-            ))}
+    <span className="timer-track-icons" aria-hidden="true">
+      {shown.map((track) => {
+        const Icon = SOUND_ICONS[getSound(track.sound).icon];
+        return (
+          <span key={track.id} className={`timer-track-icon color-${track.color}`} title={track.name}>
+            <Icon size={17} strokeWidth={1.8} />
           </span>
-        ))}
+        );
+      })}
+      {timer.tracks.length > 5 && (
+        <span className="timer-track-more">+{timer.tracks.length - shown.length}</span>
+      )}
+      {timer.tracks.length === 0 && (
+        <span className="timer-track-empty">Нет дорожек</span>
+      )}
     </span>
   );
 }
