@@ -29,6 +29,7 @@ import {
   Redo2,
   Repeat2,
   RotateCcw,
+  Search,
   SlidersHorizontal,
   Sparkles,
   Square,
@@ -120,22 +121,47 @@ function TimerList({
   activeId?: string;
   select: (id: string) => void;
 }) {
+  const [query, setQuery] = useState("");
+  const searchable = timers.length > 8;
+  const visibleTimers = searchable
+    ? timers.filter((timer) =>
+        timer.name.toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru")),
+      )
+    : timers;
   return (
-    <div className="timer-list">
-      {timers.map((t) => (
+    <div className="timer-list" role="navigation" aria-label="Список таймеров">
+      {searchable && (
+        <label className="timer-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Найти таймер"
+            placeholder="Найти таймер"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+      )}
+      {visibleTimers.map((t) => (
         <button
           className={`timer-card ${t.id === activeId ? "current" : ""}`}
           key={t.id}
-          aria-current={t.id === activeId ? "true" : undefined}
+          aria-current={t.id === activeId ? "page" : undefined}
           onClick={() => select(t.id)}
         >
           <span className="timer-card-top">
             <strong title={t.name}>{t.name}</strong>
           </span>
           <MiniSequence timer={t} />
-          <span className="timer-card-duration">{time(t.duration)}</span>
+          <span className="timer-card-duration">
+            <TimerIcon size={12} aria-hidden="true" />
+            {time(t.duration)}
+          </span>
         </button>
       ))}
+      {searchable && visibleTimers.length === 0 && (
+        <p className="timer-list-empty">Таймеры не найдены</p>
+      )}
     </div>
   );
 }
@@ -1156,6 +1182,10 @@ export default function App() {
             <Plus size={18} />
             Новый таймер
           </button>
+          <div className="sidebar-section-title">
+            <strong>Мои таймеры</strong>
+            <span>{timers.length}</span>
+          </div>
           <TimerList
             timers={timers}
             activeId={timer?.id}
