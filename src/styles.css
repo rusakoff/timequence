@@ -3719,3 +3719,32 @@ h1 {
     padding-block: 3px;
   }
 }
+
+@media (max-width: 700px) {
+  .sequence-inner {
+    --track-label: 88px;
+  }
+  .track-column-caption {
+    justify-content: center;
+    padding-inline: 4px;
+    font-size: 10px;
+  }
+  .track-label {
+    padding: 0 4px 0 5px;
+  }
+  .track-select {
+    justify-content: center;
+    gap: 0;
+  }
+  .track-select strong {
+    display: none;
+  }
+  .track-select .sound-icon {
+    width: 42px;
+    height: 42px;
+  }
+  .mute-button {
+    width: 32px;
+    height: 44px;
+  }
+}
