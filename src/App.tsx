@@ -9,7 +9,6 @@ import {
 } from "react";
 import {
   Activity,
-  ArrowLeft,
   ArrowRight,
   Bell,
   Check,
@@ -115,6 +114,13 @@ const parseClock = (value: string): number | null => {
   const match = /^(\d{1,2}):(\d{1,2})$/.exec(text);
   if (!match || Number(match[2]) > 59) return null;
   return Number(match[1]) * 60 + Number(match[2]);
+};
+const eventCountdown = (seconds: number) => {
+  const rounded = Math.max(0, Math.ceil(seconds));
+  if (rounded < 60) return String(rounded);
+  const minutes = Math.floor(rounded / 60);
+  const remainingSeconds = rounded % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 };
 const defaultTimer = (timers: Timer[]) =>
   timers.find((timer) => timer.name === DEFAULT_TIMER_NAME) ?? timers[0];
@@ -525,6 +531,8 @@ export default function App({ entry }: { entry?: string }) {
   );
   const [welcomeError, setWelcomeError] = useState("");
   const [mobileStepValue, setMobileStepValue] = useState(1);
+  const [stepMenuOpen, setStepMenuOpen] = useState(false);
+  const [timerMenuOpen, setTimerMenuOpen] = useState(false);
   const [mobileMixerOpen, setMobileMixerOpen] = useState(false);
   const [pendingStep, setPendingStep] = useState<{ timerId: string; step: number } | null>(null);
   const [soundChoice, setSoundChoice] = useState<SoundId>(DEFAULT_SOUND);
@@ -538,10 +546,13 @@ export default function App({ entry }: { entry?: string }) {
   } | null>(null);
   const [previewError, setPreviewError] = useState("");
   const previewToken = useRef(0);
+  const stepControlRef = useRef<HTMLDivElement>(null);
+  const timerMenuRef = useRef<HTMLDivElement>(null);
   const [soundAction, setSoundAction] = useState<"add" | "replace">("add");
   const [playing, setPlaying] = useState(false);
   const [busy, setBusy] = useState(false);
   const [position, setPosition] = useState(0);
+  const [eventGuideEnabled, setEventGuideEnabled] = useState(false);
   const [volume, setVolume] = useState(65);
   const [mobileGrid, setMobileGrid] = useState(() =>
     window.matchMedia("(max-width: 700px)").matches,
@@ -589,8 +600,37 @@ export default function App({ entry }: { entry?: string }) {
     : 0;
   const pixelsPerSecond = cellPitch / gridStep;
   // Start at the first cell; scroll only once the playhead reaches the center.
-  const playheadCenter = Math.max(0, (viewport.width - viewport.label) / 2);
+  const playheadCenter = Math.max(0, viewport.width / 2 - viewport.label);
   const transportToken = useRef(0);
+
+  useEffect(() => {
+    if (!stepMenuOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!stepControlRef.current?.contains(event.target as Node)) {
+        setStepMenuOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [stepMenuOpen]);
+
+  useEffect(() => {
+    if (!timerMenuOpen) return;
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!timerMenuRef.current?.contains(event.target as Node)) {
+        setTimerMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTimerMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [timerMenuOpen]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -1193,6 +1233,62 @@ export default function App({ entry }: { entry?: string }) {
   );
   const currentStep =
     position >= (timer?.duration ?? 0) ? -1 : Math.floor(position / gridStep);
+  let currentEventAt: number | null = null;
+  let nextEventAt: number | null = null;
+  let currentEventNames: string[] = [];
+  let nextEventNames: string[] = [];
+  if (timer) {
+    for (const track of timer.tracks) {
+      for (const event of track.events) {
+        const at = drag?.event === event.id ? drag.nextAt : event.at;
+        const trackName = drag?.event === event.id
+          ? timer.tracks.find((item) => item.id === drag.target)?.name ?? track.name
+          : track.name;
+        if (at <= position + 0.01) {
+          if (currentEventAt === null || at > currentEventAt + 0.01) {
+            currentEventAt = at;
+            currentEventNames = [trackName];
+          } else if (
+            Math.abs(at - currentEventAt) < 0.01 &&
+            !currentEventNames.includes(trackName)
+          ) {
+            currentEventNames.push(trackName);
+          }
+        } else if (nextEventAt === null || at < nextEventAt - 0.01) {
+          nextEventAt = at;
+          nextEventNames = [trackName];
+        } else if (
+          Math.abs(at - nextEventAt) < 0.01 &&
+          !nextEventNames.includes(trackName)
+        ) {
+          nextEventNames.push(trackName);
+        }
+      }
+    }
+  }
+  const currentEventLabel = currentEventNames.length
+    ? currentEventNames.join(" + ")
+    : "Ожидание";
+  const nextEventLabel = nextEventNames.join(" + ");
+  const guidePlayheadX = playing
+    ? Math.min(position * pixelsPerSecond, playheadCenter)
+    : position * pixelsPerSecond - viewport.left;
+  const guideEventX = nextEventAt === null
+    ? guidePlayheadX
+    : nextEventAt * pixelsPerSecond - viewport.left;
+  const guideStartX = Math.max(0, guidePlayheadX);
+  const guideWidth = Math.max(0, guideEventX - guideStartX);
+  const nextEventRemaining = nextEventAt === null
+    ? null
+    : Math.max(0, nextEventAt - position);
+  const timelineOverlayHeight = Math.max(
+    0,
+    Math.min(
+      viewport.ruler + (timer?.tracks.length ?? 0) * cellPitch - viewport.top,
+      viewport.height,
+    ),
+  );
+  const guideTimeCenterY = timelineOverlayHeight / 2;
   const selectedStepEvents = selectedEvent
     ? selectedTrack?.events.filter(
         (ev) =>
@@ -1208,6 +1304,7 @@ export default function App({ entry }: { entry?: string }) {
         ? "На паузе"
         : "Готов к запуску";
   const drawEvent = (track: Track, ev: SoundEvent, groupedEvents: SoundEvent[]) => {
+    const EventIcon = SOUND_ICONS[getSound(track.sound).icon];
     const d = drag?.event === ev.id ? drag : null;
     const at = d?.nextAt ?? ev.at;
     const cellStart = Math.floor(at / gridStep) * cellPitch;
@@ -1288,6 +1385,9 @@ export default function App({ entry }: { entry?: string }) {
           }
         }}
       >
+        <span className="sound-event-icon" aria-hidden="true">
+          <EventIcon size={18} />
+        </span>
         {groupedEvents.length > 1 && (
           <span className="cue-count" aria-hidden="true">{groupedEvents.length}</span>
         )}
@@ -1325,27 +1425,6 @@ export default function App({ entry }: { entry?: string }) {
           </button>
         </nav>
       </header>
-      <div className="timer-navigation">
-        <TimerList
-          timers={timers}
-          activeId={timer?.id}
-          select={switchTimer}
-          tabs
-        />
-        <button
-          className="new-timer"
-          aria-label="Новый таймер"
-          title={timers.length >= 100 ? "Можно создать до 100 таймеров" : "Новый таймер"}
-          onClick={() => {
-            stop();
-            setModal("create");
-          }}
-          disabled={timers.length >= 100}
-        >
-          <Plus size={18} />
-          <span>Новый таймер</span>
-        </button>
-      </div>
       <div
         className="workspace"
         id="timer-editor"
@@ -1386,27 +1465,50 @@ export default function App({ entry }: { entry?: string }) {
             </div>
           ) : (
             <>
-              <div className="editor-heading">
-                <div>
-                  <div className="title-row">
-                    <h1 className="desktop-timer-title" title={timer.name}>
-                      {timer.name}
-                    </h1>
+              <div className="editor-panel">
+                <div className="editor-heading">
+                  <div className="timer-menu-shell" ref={timerMenuRef}>
                     <button
-                      className="timer-switcher"
-                      aria-label={`Открыть список таймеров: ${timer.name}`}
+                      className="timer-menu-trigger"
+                      type="button"
+                      aria-label={`Открыть меню таймера: ${timer.name}`}
                       aria-haspopup="dialog"
-                      onClick={() => setModal("timers")}
+                      aria-expanded={timerMenuOpen}
+                      onClick={() => setTimerMenuOpen((open) => !open)}
                     >
-                      <ArrowLeft className="mobile-back" size={20} />
-                      <span className="switcher-title">{timer.name}</span>
-                      <small>
-                        {time(timer.duration)} · шаг {timer.step} с
-                      </small>
-                      <ChevronDown size={18} />
+                      <h1 title={timer.name}>{timer.name}</h1>
+                      <ChevronDown size={19} aria-hidden="true" />
                     </button>
+                    {timerMenuOpen && (
+                      <div className="timer-dropdown" role="dialog" aria-label="Таймеры и настройки">
+                        <TimerList
+                          timers={timers}
+                          activeId={timer.id}
+                          select={(id) => {
+                            switchTimer(id);
+                            setTimerMenuOpen(false);
+                          }}
+                        />
+                        <button
+                          className="timer-dropdown-new"
+                          type="button"
+                          title={timers.length >= 100 ? "Можно создать до 100 таймеров" : "Новый таймер"}
+                          disabled={timers.length >= 100}
+                          onClick={() => {
+                            stop();
+                            setTimerMenuOpen(false);
+                            setModal("create");
+                          }}
+                        >
+                          <Plus size={17} />
+                          Новый таймер
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="heading-actions">
                     <button
-                      className="icon-btn title-edit"
+                      className="icon-btn desktop-action title-edit"
                       title="Переименовать и настроить"
                       aria-label="Настройки таймера"
                       disabled={locked}
@@ -1414,37 +1516,34 @@ export default function App({ entry }: { entry?: string }) {
                     >
                       <Pencil size={18} />
                     </button>
+                    <button
+                      className="icon-btn desktop-action"
+                      title="Создать копию таймера"
+                      aria-label="Создать копию таймера"
+                      disabled={locked || timers.length >= 100}
+                      onClick={duplicateTimer}
+                    >
+                      <Copy size={18} />
+                    </button>
+                    <button
+                      className="icon-btn desktop-action"
+                      title="Удалить таймер"
+                      aria-label="Удалить таймер"
+                      disabled={locked}
+                      onClick={() => setModal("delete")}
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                    <button
+                      className="icon-btn mobile-action"
+                      aria-label="Действия с таймером"
+                      aria-haspopup="dialog"
+                      onClick={() => setModal("timer-actions")}
+                    >
+                      <MoreHorizontal size={20} />
+                    </button>
                   </div>
                 </div>
-                <div className="heading-actions">
-                  <button
-                    className="icon-btn desktop-action"
-                    title="Создать копию таймера"
-                    aria-label="Создать копию таймера"
-                    disabled={locked || timers.length >= 100}
-                    onClick={duplicateTimer}
-                  >
-                    <Copy size={18} />
-                  </button>
-                  <button
-                    className="icon-btn desktop-action"
-                    title="Удалить таймер"
-                    aria-label="Удалить таймер"
-                    disabled={locked}
-                    onClick={() => setModal("delete")}
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                  <button
-                    className="icon-btn mobile-action"
-                    aria-label="Действия с таймером"
-                    aria-haspopup="dialog"
-                    onClick={() => setModal("timer-actions")}
-                  >
-                    <MoreHorizontal size={20} />
-                  </button>
-                </div>
-              </div>
               <section
                 className="sequencer"
                 aria-label="Редактор звуковой последовательности"
@@ -1460,66 +1559,90 @@ export default function App({ entry }: { entry?: string }) {
                     >
                       <TimerIcon size={19} />
                       <span className="duration-copy">
-                        <span>Длительность</span>
                         <strong>{time(timer.duration)}</strong>
                       </span>
-                      <Pencil size={13} />
                     </button>
                     <span className="toolbar-divider" />
-                    <div className="step-control">
-                      <label className="step-editor">
-                        <span>Шаг сетки</span>
-                        <span className="step-input-wrap">
-                          <input
-                            key={`${timer.id}:${timer.step}`}
-                            aria-label="Шаг сетки в секундах"
-                            type="number"
-                            min="1"
-                            max={timer.duration}
-                            step="1"
-                            defaultValue={timer.step}
-                            disabled={locked || !!drag}
-                            onBlur={(e) => {
-                              const n = Number(e.currentTarget.value);
-                              if (
-                                !e.currentTarget.value ||
-                                !Number.isInteger(n) ||
-                                n < 1 ||
-                                n > timer.duration
-                              ) {
+                    <div
+                      className="step-control"
+                      ref={stepControlRef}
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                          setStepMenuOpen(false);
+                        }
+                      }}
+                    >
+                      <div className="step-editor">
+                        <label htmlFor={`grid-step-${timer.id}`}>Шаг сетки</label>
+                        <span className="step-field">
+                          <span className="step-input-wrap">
+                            <input
+                              key={`${timer.id}:${timer.step}`}
+                              id={`grid-step-${timer.id}`}
+                              aria-label="Шаг сетки в секундах"
+                              aria-expanded={stepMenuOpen}
+                              aria-controls="step-presets-menu"
+                              type="number"
+                              min="1"
+                              max={timer.duration}
+                              step="1"
+                              defaultValue={timer.step}
+                              disabled={locked || !!drag}
+                              onClick={() => setStepMenuOpen(true)}
+                              onFocus={() => setStepMenuOpen(true)}
+                              onBlur={(e) => {
+                                const n = Number(e.currentTarget.value);
+                                if (
+                                  !e.currentTarget.value ||
+                                  !Number.isInteger(n) ||
+                                  n < 1 ||
+                                  n > timer.duration
+                                ) {
+                                  e.currentTarget.value = String(timer.step);
+                                  return;
+                                }
+                                changeStep(n);
                                 e.currentTarget.value = String(timer.step);
-                                return;
-                              }
-                              changeStep(n);
-                              e.currentTarget.value = String(timer.step);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.currentTarget.blur();
-                              if (e.key === "Escape") {
-                                e.currentTarget.value = String(timer.step);
-                                e.currentTarget.blur();
-                              }
-                            }}
-                            title="Интервал между делениями сетки. Сигналы вне новой сетки сдвинутся после подтверждения."
-                          />
-                          <span>с</span>
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                if (e.key === "Escape") {
+                                  e.currentTarget.value = String(timer.step);
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              title="Интервал между делениями сетки. Сигналы вне новой сетки сдвинутся после подтверждения."
+                            />
+                          </span>
+                          <span className="step-unit">сек.</span>
+                          {stepMenuOpen && (
+                            <div
+                              id="step-presets-menu"
+                              className="step-presets"
+                              role="menu"
+                              aria-label="Быстрый шаг сетки"
+                            >
+                              {([1, 5, 10, 20, 30] as const).map((step) => (
+                                <button
+                                  key={step}
+                                  type="button"
+                                  className="step-preset"
+                                  role="menuitemradio"
+                                  aria-checked={timer.step === step}
+                                  disabled={locked || !!drag || step > timer.duration}
+                                  title={step > timer.duration ? "Шаг больше длительности таймера" : `${step} с`}
+                                  onClick={() => {
+                                    changeStep(step);
+                                    setStepMenuOpen(false);
+                                  }}
+                                >
+                                  <span>{step} с</span>
+                                  {timer.step === step && <Check size={14} aria-hidden="true" />}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </span>
-                      </label>
-                      <div className="step-presets" role="group" aria-label="Быстрый шаг сетки">
-                        {([1, 5, 10, 20, 30] as const).map((step) => (
-                          <button
-                            key={step}
-                            type="button"
-                            className="step-preset"
-                            aria-label={`Шаг сетки ${step} с`}
-                            aria-pressed={timer.step === step}
-                            disabled={locked || !!drag || step > timer.duration}
-                            title={step > timer.duration ? "Шаг больше длительности таймера" : `${step} с`}
-                            onClick={() => changeStep(step)}
-                          >
-                            {step}
-                          </button>
-                        ))}
                       </div>
                     </div>
                     <button
@@ -1535,6 +1658,25 @@ export default function App({ entry }: { entry?: string }) {
                       <span>Шаг сетки</span>
                       <strong>{timer.step} с</strong>
                       <ChevronDown size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      className={`event-guide-toggle ${nextEventAt === null ? "no-events" : ""}`}
+                      type="button"
+                      aria-pressed={eventGuideEnabled}
+                      aria-label={`${eventGuideEnabled ? "Выключить" : "Включить"} отсчёт до следующего события`}
+                      title={
+                        eventGuideEnabled && nextEventAt === null
+                          ? "Режим включён — впереди нет событий"
+                          : `${eventGuideEnabled ? "Выключить" : "Включить"} отсчёт до следующего события`
+                      }
+                      onClick={() => setEventGuideEnabled((enabled) => !enabled)}
+                    >
+                      <Activity size={17} aria-hidden="true" />
+                      <span>
+                        {eventGuideEnabled && nextEventAt === null
+                          ? "Нет событий"
+                          : "До события"}
+                      </span>
                     </button>
                   </div>
                   <div className="history-controls">
@@ -1556,45 +1698,13 @@ export default function App({ entry }: { entry?: string }) {
                     >
                       <Redo2 size={17} />
                     </button>
-                    <span className="toolbar-divider" />
-                    <button
-                      className={`icon-btn small ${inspectorOpen && selectedTrack ? "on" : ""}`}
-                      aria-label={
-                        inspectorOpen && selectedTrack
-                          ? "Скрыть настройки звука"
-                          : "Показать настройки звука"
-                      }
-                      aria-expanded={inspectorOpen && !!selectedTrack}
-                      aria-controls="sound-properties"
-                      disabled={!selectedTrack || locked}
-                      onClick={() =>
-                        inspectorOpen
-                          ? closeInspector()
-                          : setInspectorOpen(true)
-                      }
-                      title="Настройки выбранного звука"
-                    >
-                      <SlidersHorizontal size={18} />
-                    </button>
-                    <button
-                      className={`icon-btn small ${timer.loop ? "on" : ""}`}
-                      title="Зациклить таймер"
-                      aria-label="Зациклить таймер"
-                      aria-pressed={timer.loop}
-                      disabled={locked}
-                      onClick={() =>
-                        updateTimer({ ...timer, loop: !timer.loop })
-                      }
-                    >
-                      <Repeat2 size={18} />
-                    </button>
                   </div>
                 </div>
                 <div
-                  className="sequence-viewport"
+                  className={`sequence-viewport ${viewport.left > 1 ? "is-scrolled-x" : ""}`}
                   style={
                     {
-                      "--timeline-end-space": `${playheadCenter}px`,
+                      "--timeline-end-space": `${playheadCenter + viewport.label}px`,
                       "--mobile-sequence-height": `${Math.max(160, 32 + Math.min(timer.tracks.length, 5) * cellPitch)}px`,
                     } as CSSProperties
                   }
@@ -1610,7 +1720,7 @@ export default function App({ entry }: { entry?: string }) {
                       }
                     >
                       <div className="ruler-row">
-                        <div className="track-column-caption">Дорожки</div>
+                        <div className="track-column-caption" aria-hidden="true" />
                         <div
                           className="ruler"
                           style={{
@@ -1768,7 +1878,7 @@ export default function App({ entry }: { entry?: string }) {
                                           addEvent(track, index * gridStep)
                                         }
                                       >
-                                        <Plus size={14} />
+                                        <Plus size={20} />
                                       </button>
                                     ))}
                                   </div>
@@ -1796,20 +1906,53 @@ export default function App({ entry }: { entry?: string }) {
                     </div>
                   </div>
                   {timer.tracks.length > 0 && (
+                    eventGuideEnabled && nextEventAt !== null && nextEventRemaining !== null && (
+                      <div
+                        className="event-guide-area"
+                        aria-hidden="true"
+                        style={{
+                          left: viewport.label,
+                          top: 0,
+                          width: viewport.width - viewport.label,
+                          height: timelineOverlayHeight,
+                        }}
+                      >
+                        <div
+                          className="event-guide-range"
+                          key={nextEventAt}
+                          style={
+                            {
+                              "--event-guide-left": `${guideStartX}px`,
+                              "--event-guide-width": `${guideWidth}px`,
+                              "--event-guide-ruler": `${viewport.ruler}px`,
+                              "--event-guide-center-y": `${guideTimeCenterY}px`,
+                            } as CSSProperties
+                          }
+                        >
+                          <span className="event-guide-caption event-guide-current">
+                            {currentEventLabel}
+                          </span>
+                          <span
+                            className={`event-guide-time ${guideWidth <= cellPitch ? "is-hidden" : ""}`}
+                          >
+                            {eventCountdown(nextEventRemaining)}
+                          </span>
+                          <span className="event-guide-caption event-guide-next">
+                            {nextEventLabel}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  )}
+                  {timer.tracks.length > 0 && (
                     <div
                       className="playhead-area"
                       aria-hidden="true"
                       style={{
                         left: viewport.label,
-                        top: viewport.ruler,
+                        top: 0,
                         width: viewport.width - viewport.label,
-                        height: Math.max(
-                          0,
-                          Math.min(
-                            timer.tracks.length * cellPitch - viewport.top,
-                            viewport.height - viewport.ruler,
-                          ),
-                        ),
+                        height: timelineOverlayHeight,
                       }}
                     >
                       <div
@@ -1838,7 +1981,8 @@ export default function App({ entry }: { entry?: string }) {
                     Добавить дорожку
                   </button>
                 </div>
-              </section>
+                </section>
+              </div>
               {selectedTrack && inspectorOpen && (
                 <SettingsPopover
                   ariaLabel={
